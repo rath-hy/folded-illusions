@@ -1,0 +1,8 @@
+# CPU work and tests. The diffusion notebooks install their own packages on Colab.
+numpy>=1.26
+scipy>=1.11
+matplotlib>=3.8
+pillow>=10.1
+opencv-python-headless>=4.7
+pytest>=8
+jupyter
