@@ -115,6 +115,25 @@ def test_the_sampler_runs_and_restores_the_original_blend(views):
     assert not np.allclose(s2, b2)                       # the blend really changed
 
 
+def test_scores_rank_the_sheet_that_shows_each_subject_where_it_belongs(views):
+    # A stand-in for CLIP: an image's embedding is its mean color, a text's is a named color.
+    colors = {"red": [1, 0, 0], "green": [0, 1, 0], "blue": [0, 0, 1]}
+    unit = lambda v: np.asarray(v, float) / np.linalg.norm(v)
+    embed_images = lambda ims: [unit(np.asarray(im).reshape(-1, 3).mean(0) + 1e-6) for im in ims]
+    embed_texts = lambda texts: [unit(colors[t]) for t in texts]
+    R = views.res
+    good = np.zeros((R, R, 3)); good[..., 0] = 1                    # red sheet
+    s = np.moveaxis(good, -1, 0)
+    for view, color in (("front", 1), ("back", 2)):                  # visible paper green, then blue
+        hit = np.zeros(R * R, bool); hit[views.source[view][views.paper[view]]] = True
+        s[:, hit.reshape(R, R)] = np.eye(3)[color][:, None]
+    good = np.moveaxis(s, 0, -1)
+    bad = np.full((R, R, 3), 1 / 3)
+    rows = factorized.score_views(views, {"bad": bad, "good": good}, embed_images, embed_texts, ("red", "green", "blue"))
+    assert [r["label"] for r in rows] == ["good", "bad"]
+    assert rows[0]["front"] > rows[1]["front"] and rows[0]["back"] > rows[1]["back"]
+
+
 def test_preview_matches_composite_where_blur_is_off(views):
     flat = np.random.default_rng(0).random((32, 32, 3))
     front = np.random.default_rng(1).random((32, 32, 3))
