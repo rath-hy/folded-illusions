@@ -130,6 +130,49 @@ def views_of(views, sheet, background=1.0):
     return [sheet] + [np.moveaxis(views.to_view(s, v, background), 0, -1) for v in ("front", "back")]
 
 
+def score_views(views, sheets, embed_images, embed_texts, texts):
+    """Rank sheets by how well each view matches its own description and how well the flat view
+    hides the folded subjects, with an image-text model such as CLIP. embed_images(list of (R, R, 3)
+    arrays) and embed_texts(list of strings) return unit-length embeddings, one row each. texts:
+    (flat, front, back) descriptions. Returns rows, best first, each with the cosine similarity of
+    every view to its own text, leak (the flat view's highest similarity to a folded text; lower
+    hides better), and score = mean own similarity - leak. A rough guide, not a judge of beauty."""
+    t = np.asarray(embed_texts(list(texts)), float)
+    rows = []
+    for label, sheet in sheets.items():
+        v = np.asarray(embed_images(views_of(views, sheet)), float)
+        own = [float(v[k] @ t[k]) for k in range(3)]
+        leak = float(max(v[0] @ t[1], v[0] @ t[2]))
+        rows.append(dict(label=label, flat=own[0], front=own[1], back=own[2], leak=leak,
+                         score=float(np.mean(own) - leak)))
+    return sorted(rows, key=lambda r: -r["score"])
+
+
+def clip_embedders(device="cuda", name="openai/clip-vit-large-patch14"):
+    """embed_images and embed_texts for score_views, from CLIP via transformers."""
+    import torch
+    from PIL import Image
+    from transformers import CLIPModel, CLIPProcessor
+    model = CLIPModel.from_pretrained(name, torch_dtype=torch.float16).to(device).eval()
+    processor = CLIPProcessor.from_pretrained(name)
+
+    def unit(x):
+        return (x / x.norm(dim=-1, keepdim=True)).float().cpu().numpy()
+
+    @torch.no_grad()
+    def embed_images(images):
+        pil = [Image.fromarray((np.clip(im, 0, 1) * 255).astype(np.uint8)) for im in images]
+        pixels = processor(images=pil, return_tensors="pt")["pixel_values"].to(device, torch.float16)
+        return unit(model.get_image_features(pixel_values=pixels))
+
+    @torch.no_grad()
+    def embed_texts(texts):
+        tokens = processor(text=texts, return_tensors="pt", padding=True).to(device)
+        return unit(model.get_text_features(**tokens))
+
+    return embed_images, embed_texts
+
+
 def plot_comparison(views, sheets, titles=("flat", "fox wing (front view)", "owl wing (back view)")):
     """One row per sheet in sheets ({label: (R, R, 3) sheet}): flat, then each folded view."""
     import matplotlib.pyplot as plt
