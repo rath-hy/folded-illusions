@@ -124,14 +124,14 @@ Real faces aren't flat. A flat fit per face misses by 7 to 13 pixels, so each fa
 
 The new goal is Dalí-style ambiguity. Every piece of the flat sheet should read as part of the scene, and folding cuts a piece out of its context so it resolves into something else. The fold maps show folding does three things to a wing at once. Each wing is an upright triangle made of two shards that lie along two different edges of the sheet, touching only at a corner. Folding cuts them out of their surroundings, turns each by a different angle, and joins them along an edge they never shared.
 
-[`ambiguous.py`](ambiguous.py) is a MultiDiffusion-style sampler (Bar-Tal et al., 2023). It takes any set of views of the sheet, each with its own prompt and weight. [`ambiguous_illusions.ipynb`](ambiguous_illusions.ipynb) compares four methods with the same prompts, plus the old averaging as a baseline:
+[`ambiguous.py`](ambiguous.py) is a MultiDiffusion-style sampler (Bar-Tal et al., 2023). It takes any set of views of the sheet, each with its own prompt and weight. It has four methods, plus the old averaging as a baseline:
 
-1. **Context:** windows tiled over the sheet each ask for a sakura close-up, a local anagram inside a global scene.
+1. **Context:** windows tiled over the sheet each ask for a close-up of the scene, a local anagram inside a global scene.
 2. **Arcimboldo:** the scene controls only the large shapes, and the windows and wings the detail.
 3. **Silhouette:** the wing views show only the wing, and their prompts describe its shape.
-4. **Fold-in:** each wing shard in place asks for sakura, and the joined wing for its subject.
+4. **Fold-in:** each wing shard in place asks for scenery, and the joined wing for its subject.
 
-Not yet run on a GPU.
+The first runs used Tokyo under sakura flat, with a sunset and a cicada on the wings. Arcimboldo was the clear winner: the cicada is drawn with the same branch strokes and blossoms as the rest of the scene, so it belongs to the flat sheet instead of sitting on top of it. The other methods made it either too faint or tacked on. No method made the sunset read, since a sunset is a smooth gradient and the flat sky is already orange. To save GPU time, [`ambiguous_illusions.ipynb`](ambiguous_illusions.ipynb) now runs only arcimboldo and the baseline, with a crisp red sun in place of the sunset.
 
 ## Next
 

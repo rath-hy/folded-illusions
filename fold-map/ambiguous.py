@@ -6,8 +6,8 @@ flat sheet, as long as it reads as part of the scene there, and as the wing's su
 Dalí's double images work this way: context decides what a shape is.
 
 On the crane, each folded view is a mosaic of shards from all over the sheet. Each wing is an
-upright triangle joined from two shards that lie at opposite edges of the flat sheet, each rotated
-differently by the fold. So folding does three things to a piece of the picture at once: it cuts
+upright triangle joined from two shards that lie along two different edges of the flat sheet,
+touching only at a corner tip, each rotated differently by the fold. So folding does three things to a piece of the picture at once: it cuts
 the piece out of its surroundings, turns it, and joins it to another piece.
 
 Every method here is a set of views of the sheet, each with its own prompt, sampled together as in
