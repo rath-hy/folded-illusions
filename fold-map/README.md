@@ -118,6 +118,21 @@ The first real anamorphosis: [`cube_anamorphosis.ipynb`](cube_anamorphosis.ipynb
 
 Real faces aren't flat. A flat fit per face misses by 7 to 13 pixels, so each face gets a homography plus a thin-plate spline fitted to its markers and the checker corners between them, which brings points it wasn't fitted to down to about 0.1 to 0.3 mm. The output, [`prints/cube_holbein_a4.pdf`](prints/cube_holbein_a4.pdf), is Holbein's self-portrait skewed into an L, with 4 mm of bleed past each edge. Fold it, look from about 18 cm with one eye, and it should straighten out. I printed and folded it, and the result looks pretty satisfactory by eye. The bleed gave useful wiggle room. The error hasn't been measured yet, and one fold can't show how well the board's bow repeats. The right face was also at least a third dimmer in the photo's light, so it needs even lighting.
 
+## Ambiguous folds instead of hidden pictures
+
+[`factorized_illusions.ipynb`](factorized_illusions.ipynb) tried a different way of sharing the wings' pixels: following Factorized Diffusion, the flat prompt gets the low frequencies and the wing prompts the high ones. With Japan prompts (Mt Fuji under sakura flat, a koi and a torii gate on the wings), one result had strong wings, but the torii still showed through on the flat sheet. I stopped trying to hide the wings at all. A crane wing is a crop of the sheet, so a wing picture that reads clearly is visible flat too.
+
+The new goal is Dalí-style ambiguity. Every piece of the flat sheet should read as part of the scene, and folding cuts a piece out of its context so it resolves into something else. The fold maps show folding does three things to a wing at once. Each wing is an upright triangle made of two shards that lie along two different edges of the sheet, touching only at a corner. Folding cuts them out of their surroundings, turns each by a different angle, and joins them along an edge they never shared.
+
+[`ambiguous.py`](ambiguous.py) is a MultiDiffusion-style sampler (Bar-Tal et al., 2023). It takes any set of views of the sheet, each with its own prompt and weight. [`ambiguous_illusions.ipynb`](ambiguous_illusions.ipynb) compares four methods with the same prompts, plus the old averaging as a baseline:
+
+1. **Context:** windows tiled over the sheet each ask for a sakura close-up, a local anagram inside a global scene.
+2. **Arcimboldo:** the scene controls only the large shapes, and the windows and wings the detail.
+3. **Silhouette:** the wing views show only the wing, and their prompts describe its shape.
+4. **Fold-in:** each wing shard in place asks for sakura, and the joined wing for its subject.
+
+Not yet run on a GPU.
+
 ## Next
 
 - Splice an image onto the visible regions using `fold_map.npz`.

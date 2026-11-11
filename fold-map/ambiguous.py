@@ -1,0 +1,384 @@
+"""Ambiguous fold art: pictures that read one way on the flat sheet, and resolve into something else
+once folding cuts a piece out of its context.
+
+The goal is no longer to hide the folded pictures. A wing's paper may look like anything on the
+flat sheet, as long as it reads as part of the scene there, and as the wing's subject once folded.
+Dalí's double images work this way: context decides what a shape is.
+
+On the crane, each folded view is a mosaic of shards from all over the sheet. Each wing is an
+upright triangle joined from two shards that lie at opposite edges of the flat sheet, each rotated
+differently by the fold. So folding does three things to a piece of the picture at once: it cuts
+the piece out of its surroundings, turns it, and joins it to another piece.
+
+Every method here is a set of views of the sheet, each with its own prompt, sampled together as in
+MultiDiffusion (Bar-Tal et al., ICML 2023): at every denoising step, each view's noise prediction is
+mapped back onto the sheet and the predictions are averaged per pixel, weighted. Optionally, as in
+Factorized Diffusion (Geng, Park, Owens, ECCV 2024), some views control only the low frequencies and
+others only the high ones. The methods (see METHODS):
+
+  average     the baseline: the flat view and both folded views, equally weighted, which is the
+              blend illusion.generate uses with fold_weight 0.5
+  context     a local anagram inside a global scene: the baseline, plus windows tiled over the sheet
+              that each ask for a close-up detail of the scene, so every neighborhood of the sheet
+              reads as part of the scene while the folded views read as their subjects
+  arcimboldo  the flat prompt controls only the low frequencies, as the large gestalt; the folded
+              views and the context windows control the high frequencies, as many small objects
+  silhouette  the folded views show only the wings, not the whole crane, and their prompts describe
+              the wing's shape, so the paper's own outline does part of the work
+  fold-in     like a MAD fold-in: each wing's two shards, in place on the flat sheet with a margin
+              of surroundings, ask for a scene detail, and joined on the wing they ask for its subject
+
+The sampler has the same structure as illusion.generate (stage 1, then stage 2 conditioned on the
+upscaled stage 1, with a re-noised plain backdrop around every view), but takes any list of views,
+each with its own prompt and weight, and batches the model calls so that many views fit in memory.
+illusion.py is unchanged.
+"""
+from dataclasses import dataclass
+
+import numpy as np
+
+import illusion
+from factorized import split
+
+METHODS = ("average", "context", "arcimboldo", "silhouette", "fold-in")
+
+# The blur width each method splits frequencies at, as a fraction of the sheet's side (0: no split).
+SIGMA_FRAC = {"arcimboldo": 1 / 8}
+
+
+@dataclass
+class View:
+    """One way of looking at the sheet, with its own prompt.
+
+    name: label for plots. prompt: key into the prompt embeddings. source: (R * R,) sheet pixel
+    (flat index) each canvas pixel shows. paper: (R, R) bool, canvas pixels that show the sheet (the
+    rest is plain backdrop). sheet_px, canvas_px: one-to-one pairs saying which canvas pixel each
+    covered sheet pixel takes its prediction from. weight: its share in the per-pixel average.
+    part: "all", or "low" / "high" to control only those frequencies.
+    """
+    name: str
+    prompt: str
+    source: np.ndarray
+    paper: np.ndarray
+    sheet_px: np.ndarray
+    canvas_px: np.ndarray
+    weight: float = 1.0
+    part: str = "all"
+
+    @property
+    def res(self):
+        return self.paper.shape[0]
+
+    def covers(self):
+        """(R, R) bool: the sheet pixels this view controls."""
+        out = np.zeros(self.res * self.res, bool)
+        out[self.sheet_px] = True
+        return out.reshape(self.res, self.res)
+
+    def show(self, sheet, background=1.0):
+        """The view's canvas for an (R, R, 3) sheet."""
+        R = self.res
+        out = np.asarray(sheet, float).reshape(R * R, -1)[self.source].reshape(R, R, -1)
+        return np.where(self.paper[..., None], out, background)
+
+
+# ---------------------------------------------------------------------------------------------
+# Views (NumPy)
+
+
+def flat_view(fv, prompt="flat", **kw):
+    """The whole sheet as it lies flat."""
+    R = fv.res
+    every = np.arange(R * R)
+    return View("flat", prompt, every, np.ones((R, R), bool), every, every, **kw)
+
+
+def fold_view(fv, side, prompt, keep=None, name=None, **kw):
+    """A folded view of the crane ("front" or "back"), optionally limited to the paper whose sheet
+    pixels are in keep ((R, R) bool), with the rest of the canvas left as backdrop."""
+    R = fv.res
+    source = fv.source[side].ravel()
+    paper = fv.paper[side].copy()
+    sheet_px, canvas_px = fv.pairs[side]
+    if keep is not None:
+        keep = keep.ravel()
+        paper &= keep[source].reshape(R, R)
+        ok = keep[sheet_px] & paper.ravel()[canvas_px]
+        sheet_px, canvas_px = sheet_px[ok], canvas_px[ok]
+    return View(name or side, prompt, source, paper, sheet_px, canvas_px, **kw)
+
+
+def shards(fv, side):
+    """The connected pieces of the sheet that a folded view shows, as (R, R) bool masks, largest first."""
+    from scipy import ndimage
+    labels, n = ndimage.label(fv.visible[side])
+    masks = [labels == k for k in range(1, n + 1)]
+    return sorted(masks, key=lambda m: -m.sum())
+
+
+def wing_shards(fv, side, frac=0.8):
+    """The shards that make up the wing: on the crane, the two largest, of equal size, which join
+    into the upright triangle on the folded view."""
+    pieces = shards(fv, side)
+    return [m for m in pieces if m.sum() >= frac * pieces[0].sum()]
+
+
+def wing(fv, side):
+    """(R, R) bool: the sheet pixels of a view's wing."""
+    return np.any(wing_shards(fv, side), axis=0)
+
+
+def in_place_view(fv, mask, prompt, margin=0.0, name="in place", **kw):
+    """Part of the sheet as it lies flat, unrotated, moved to the middle of the canvas: the pixels in
+    mask ((R, R) bool), grown by margin (a fraction of the sheet's side) to include surroundings."""
+    from scipy import ndimage
+    R = fv.res
+    grow = round(margin * R)
+    region = ndimage.binary_dilation(mask, iterations=grow) if grow else mask
+    rows, cols = np.nonzero(region)
+    dr = round((rows.min() + rows.max()) / 2 - (R - 1) / 2)
+    dc = round((cols.min() + cols.max()) / 2 - (R - 1) / 2)
+    r, c = np.mgrid[:R, :R]
+    sr, sc = r + dr, c + dc                                      # canvas (r, c) shows sheet (sr, sc)
+    inside = (sr >= 0) & (sr < R) & (sc >= 0) & (sc < R)
+    sr, sc = sr.clip(0, R - 1), sc.clip(0, R - 1)
+    paper = inside & region[sr, sc]
+    source = (sr * R + sc).ravel()
+    canvas_px = np.flatnonzero(paper)
+    return View(name, prompt, source, paper, source[canvas_px], canvas_px, **kw)
+
+
+def windows(fv, prompt, size=0.5, stride=0.25, **kw):
+    """Square windows tiled over the sheet, overlapping, each a view of its own: MultiDiffusion's
+    sliding windows. size and stride are fractions of the sheet's side."""
+    R = fv.res
+    s, step = round(size * R), max(1, round(stride * R))
+    starts = sorted(set(list(range(0, R - s + 1, step)) + [R - s]))
+    out = []
+    for r0 in starts:
+        for c0 in starts:
+            box = np.zeros((R, R), bool)
+            box[r0:r0 + s, c0:c0 + s] = True
+            out.append(in_place_view(fv, box, prompt, name=f"window {r0},{c0}", **kw))
+    return out
+
+
+def method_views(method, fv, context_weight=0.25, margin=1 / 16):
+    """The views a method samples with, for one FoldViews. Prompt keys: "flat", "front", "back",
+    "context" (a close-up detail of the flat scene), and "front_shape", "back_shape" (the wing
+    subjects described with the wing's shape). context_weight: each context window's weight (about
+    four overlap at every pixel). margin: surroundings around each shard in the fold-in method."""
+    if method == "average":
+        return [flat_view(fv), fold_view(fv, "front", "front"), fold_view(fv, "back", "back")]
+    if method == "context":
+        return method_views("average", fv) + windows(fv, "context", weight=context_weight)
+    if method == "arcimboldo":
+        return ([flat_view(fv, part="low"), fold_view(fv, "front", "front", part="high"),
+                 fold_view(fv, "back", "back", part="high")]
+                + windows(fv, "context", weight=context_weight, part="high"))
+    if method == "silhouette":
+        return [flat_view(fv)] + [fold_view(fv, side, f"{side}_shape", keep=wing(fv, side), name=f"{side} wing")
+                                  for side in ("front", "back")]
+    if method == "fold-in":
+        views = [flat_view(fv)]
+        for side in ("front", "back"):
+            views.append(fold_view(fv, side, side, keep=wing(fv, side), name=f"{side} wing"))
+            views += [in_place_view(fv, m, "context", margin, name=f"{side} shard {k + 1} in place")
+                      for k, m in enumerate(wing_shards(fv, side))]
+        return views
+    raise ValueError(f"unknown method {method!r}; choose from {METHODS}")
+
+
+# ---------------------------------------------------------------------------------------------
+# Sampler (PyTorch)
+
+
+def combine(preds, views, maps, R, sigma=0.0):
+    """Map each view's prediction back onto the sheet and average per pixel, weighted. If any view
+    has part "high", the noise channels take the "low" and "all" views' average blurred, plus the
+    "high" views' detail (factorized.split); variance channels always take the plain average.
+    preds: one (C, R, R) prediction per view, in its own canvas. maps: torch sheet_px/canvas_px."""
+    import torch
+    C = preds[0].shape[0]
+
+    def average(members, fallback=None):
+        total = torch.zeros((C, R * R), device=preds[0].device)
+        weight = torch.zeros(R * R, device=preds[0].device)
+        for k in members:
+            m, w = maps[k], views[k].weight
+            total.index_add_(1, m["sheet_px"], w * preds[k].reshape(C, -1)[:, m["canvas_px"]].float())
+            weight.index_add_(0, m["sheet_px"], weight.new_full((len(m["sheet_px"]),), w))
+        out = total / weight.clamp(min=1e-12)
+        if fallback is not None:
+            out = torch.where(weight > 0, out, fallback.reshape(C, -1))
+        return out.reshape(C, R, R)
+
+    everything = average(range(len(views)))
+    high = [k for k, v in enumerate(views) if v.part == "high"]
+    if not high:
+        return everything.to(preds[0].dtype)
+    low = average([k for k, v in enumerate(views) if v.part != "high"])
+    detail = average(high, fallback=low)
+    noise = split(low[:3], detail[:3], sigma)
+    return torch.cat([noise, everything[3:]]).to(preds[0].dtype)
+
+
+def encode_prompts(encoder, prompts):
+    """{key: text} -> {key: (negative, positive)} embeddings, each (1, tokens, dim), from an IFPipeline."""
+    keys = list(prompts)
+    pos, neg = encoder.encode_prompt([prompts[k] for k in keys])
+    return {k: (neg[i:i + 1], pos[i:i + 1]) for i, k in enumerate(keys)}
+
+
+def generate(stage_1, stage_2, views1, views2, embeds, guidance=(7.0, 4.0), steps=(50, 40), sigma_frac=0.0,
+             background=0.85, noise_level=250, seed=0, batch_size=8, progress=None):
+    """Sample a sheet with DeepFloyd IF from any set of views.
+
+    views1, views2: lists of View for stage 1 (64 pixels) and stage 2 (256 pixels), usually
+    method_views(method, views64) and method_views(method, views256). embeds: {prompt key:
+    (negative, positive)} from encode_prompts. sigma_frac: the frequency split's blur width as a
+    fraction of the sheet's side, used if any view has part "low" or "high". batch_size: views per
+    model call; lower it if the GPU runs out of memory. Other arguments as in illusion.generate.
+    Returns (stage-1 sheet, final sheet) as (R, R, 3) arrays in [0, 1]."""
+    import torch
+    import torch.nn.functional as F
+    device = stage_1._execution_device
+    dtype = stage_1.unet.dtype
+    gen = torch.Generator(device).manual_seed(seed)
+    E = {k: tuple(e.to(device, dtype).reshape(1, *e.shape[-2:]) for e in pair) for k, pair in embeds.items()}
+
+    def run(pipe, views, n_steps, scale, cond=None, level=None):
+        R = views[0].res
+        maps = [dict(source=torch.as_tensor(v.source, device=device), paper=torch.as_tensor(v.paper, device=device),
+                     sheet_px=torch.as_tensor(v.sheet_px, device=device),
+                     canvas_px=torch.as_tensor(v.canvas_px, device=device)) for v in views]
+        pipe.scheduler.set_timesteps(n_steps, device=device)
+        x = torch.randn((1, 3, R, R), generator=gen, device=device, dtype=dtype) * pipe.scheduler.init_noise_sigma
+        bg = torch.full((1, 3, R, R), background * 2 - 1, device=device, dtype=dtype)
+        bg_noise = torch.randn((1, 3, R, R), generator=gen, device=device, dtype=dtype)
+        bg_c = None
+        if cond is not None:
+            noise = torch.randn_like(bg)
+            bg_c = pipe.image_noising_scheduler.add_noise(bg, noise, level.reshape(1))
+            cond = pipe.image_noising_scheduler.add_noise(cond, noise, level.reshape(1))
+        for i, t in enumerate(pipe.scheduler.timesteps):
+            bg_t = pipe.scheduler.add_noise(bg, bg_noise, t.reshape(1))
+            xs = pipe.scheduler.scale_model_input(x, t)
+            inputs = []
+            for m in maps:
+                xv = illusion._gather(xs, m, bg_t)
+                if cond is not None:
+                    xv = torch.cat([xv, illusion._gather(cond, m, bg_c)], 1)
+                inputs.append(xv)
+            preds = []
+            for j in range(0, len(views), batch_size):
+                chunk, vs = inputs[j:j + batch_size], views[j:j + batch_size]
+                neg = torch.cat([E[v.prompt][0] for v in vs])
+                pos = torch.cat([E[v.prompt][1] for v in vs])
+                kw = {} if level is None else {"class_labels": level.reshape(1).repeat(2 * len(vs))}
+                out = pipe.unet(torch.cat(chunk * 2), t, encoder_hidden_states=torch.cat([neg, pos]),
+                                return_dict=False, **kw)[0]
+                uncond, text = out.chunk(2)
+                guided = uncond[:, :3] + scale * (text[:, :3] - uncond[:, :3])
+                preds += list(torch.cat([guided, text[:, 3:]], 1))
+            pred = combine(preds, views, maps, R, sigma_frac * R)[None]
+            x = pipe.scheduler.step(pred, t, x, generator=gen, return_dict=False)[0]
+            if progress:
+                progress(i, len(pipe.scheduler.timesteps))
+        return x
+
+    with torch.no_grad():
+        x1 = run(stage_1, views1, steps[0], guidance[0])
+        R2 = views2[0].res
+        up = F.interpolate(x1.float(), (R2, R2), mode="bilinear", align_corners=True).to(dtype)
+        x2 = run(stage_2, views2, steps[1], guidance[1], cond=up, level=torch.tensor(noise_level, device=device))
+
+    to_img = lambda x: ((x[0].float().clamp(-1, 1) + 1) / 2).permute(1, 2, 0).cpu().numpy()
+    return to_img(x1), to_img(x2)
+
+
+# ---------------------------------------------------------------------------------------------
+# Looking at results
+
+
+def shard_crops(fv, sheet, side, margin=1 / 16):
+    """Each wing shard as it appears on the flat sheet, in a square crop with its surroundings."""
+    R = fv.res
+    out = []
+    for m in wing_shards(fv, side):
+        rows, cols = np.nonzero(m)
+        half = (max(np.ptp(rows), np.ptp(cols)) + 1) / 2 + margin * R
+        side_px = min(R, int(np.ceil(2 * half)))
+        r0 = int(np.clip(round((rows.min() + rows.max()) / 2 - side_px / 2), 0, R - side_px))
+        c0 = int(np.clip(round((cols.min() + cols.max()) / 2 - side_px / 2), 0, R - side_px))
+        out.append(np.asarray(sheet)[r0:r0 + side_px, c0:c0 + side_px])
+    return out
+
+
+def score(fv, sheets, embed_images, embed_texts, texts, margin=1 / 16):
+    """Rank sheets with an image-text model such as CLIP (factorized.clip_embedders).
+
+    texts: (flat, front, back) descriptions. For each sheet: flat, front, back are the cosine
+    similarities of the flat sheet and the two folded views to their own text. front_switch and
+    back_switch measure the reveal: the folded view's similarity to its text, minus the mean
+    similarity to the same text of its wing shards seen in place on the flat sheet. Positive means
+    folding turns those pixels into the subject. score = mean of flat, front, back, plus the mean
+    switch. Returns rows, best first. A rough guide, not a judge of beauty."""
+    t = np.asarray(embed_texts(list(texts)), float)
+    rows = []
+    for label, sheet in sheets.items():
+        whole = [sheet] + [fold_view(fv, s, s).show(sheet) for s in ("front", "back")]
+        crops = {s: shard_crops(fv, sheet, s, margin) for s in ("front", "back")}
+        images = whole + crops["front"] + crops["back"]
+        v = np.asarray(embed_images(images), float)
+        own = [float(v[k] @ t[k]) for k in range(3)]
+        row = dict(label=label, flat=own[0], front=own[1], back=own[2])
+        start = 3
+        for k, s in ((1, "front"), (2, "back")):
+            n = len(crops[s])
+            in_place = float(np.mean(v[start:start + n] @ t[k]))
+            row[f"{s}_switch"] = own[k] - in_place
+            start += n
+        row["score"] = float(np.mean(own) + (row["front_switch"] + row["back_switch"]) / 2)
+        rows.append(row)
+    return sorted(rows, key=lambda r: -r["score"])
+
+
+def plot_views(views, sheet, cols=6):
+    """Each view's canvas for a sheet: what the model is shown for that view at every step."""
+    import matplotlib.pyplot as plt
+    rows = int(np.ceil(len(views) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(2.2 * cols, 2.4 * rows), squeeze=False)
+    for ax in axes.ravel():
+        ax.axis("off")
+    for ax, v in zip(axes.ravel(), views):
+        ax.imshow(np.clip(v.show(sheet, 0.85), 0, 1))
+        extra = "" if v.part == "all" else f", {v.part}"
+        ax.set_title(f"{v.name}\n{v.prompt} ×{v.weight:g}{extra}", fontsize=8)
+    fig.tight_layout()
+    return fig
+
+
+def plot_reveal(fv, sheets, titles=("flat", "front wing", "back wing"), margin=1 / 16):
+    """One row per sheet: the flat sheet, then for each wing its shards in place on the flat sheet
+    (in context) and the folded view (isolated and joined)."""
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(len(sheets), 5, figsize=(17, 3.6 * len(sheets)), squeeze=False,
+                             gridspec_kw={"width_ratios": [1, 1.2, 1, 1.2, 1]})
+    for row, (label, sheet) in zip(axes, sheets.items()):
+        row[0].imshow(np.clip(sheet, 0, 1))
+        row[0].set_title(f"{label}: {titles[0]}", fontsize=9)
+        for k, side in enumerate(("front", "back")):
+            crops = shard_crops(fv, sheet, side, margin)
+            h = max(c.shape[0] for c in crops)
+            gap = np.ones((h, max(2, h // 12), 3))
+            pad = lambda c: np.concatenate([c, np.ones((h - c.shape[0], c.shape[1], 3))]) if c.shape[0] < h else c
+            strip = np.concatenate(sum([[pad(c), gap] for c in crops], [])[:-1], 1)
+            row[1 + 2 * k].imshow(np.clip(strip, 0, 1))
+            row[1 + 2 * k].set_title(f"{titles[1 + k]}: shards in place", fontsize=9)
+            row[2 + 2 * k].imshow(np.clip(fold_view(fv, side, side).show(sheet), 0, 1))
+            row[2 + 2 * k].set_title(f"{titles[1 + k]}: folded", fontsize=9)
+    for ax in axes.ravel():
+        ax.axis("off")
+    fig.tight_layout()
+    return fig
