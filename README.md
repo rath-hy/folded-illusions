@@ -8,7 +8,7 @@ Team onboarding doc: [Folded Illusions: Team Onboarding](https://claude.ai/artif
 
 | Trick | Demo | Code | Status |
 | --- | --- | --- | --- |
-| Multi-view diffusion | Crane: one picture flat, another on each wing | `fold-map/illusions.ipynb`, `fold-map/factorized_illusions.ipynb`, `fold-map/ambiguous_illusions.ipynb` | One print trial: the fox read well, the owl barely showed. Hiding the wings' pictures failed. Ambiguous pictures that folding resolves work better: arcimboldo gave a cicada that belongs to the flat scene |
+| Multi-view diffusion | Crane: one picture flat, another on each wing | `fold-map/illusions.ipynb`, `fold-map/factorized_illusions.ipynb`, `fold-map/ambiguous_illusions.ipynb` | One print trial: the fox read well, the owl barely showed. Hiding the wings' pictures failed. Ambiguous pictures that folding resolves work better: arcimboldo gave a cicada that belongs to the flat scene, and with the XL model the plain average gave the final print: a koi and a red sun over Tokyo |
 | Folding story | A new picture at each folding stage | `fold-map/story.ipynb`, `fold-map/story_more_pixels.ipynb` | Pipeline runs, no satisfying result yet |
 | Anamorphosis | Holbein's face centered on a cube corner | `fold-map/cube_anamorphosis.ipynb` | Printed and folded; looks good by eye, error not measured |
 | Same pixels | Buddhist imagery on a fortune teller | `same-pixels/same_pixels.ipynb` | Method works on flat images, nothing folded yet |

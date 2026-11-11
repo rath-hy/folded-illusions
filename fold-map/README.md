@@ -135,6 +135,8 @@ The first runs used Tokyo under sakura flat, with a sunset and a cicada on the w
 
 The first red-sun run showed that stage 1 decides whether a wing gets its subject at all, and that depends mostly on the seed: seed 0 got a clean disc and cicada, and seeds 1 and 2 got a rooftop and branches. Stage 2 then weakened even seed 0's wings, and left straight seams: the folded crane's outline, and a frame along the sheet's border, which shows down the middle of each folded wing because the two wing shards join along the sheet's border. So the notebook now screens many seeds at stage 1 alone, tries stage-2 settings on one good seed (frequency split or none, and how closely stage 2 follows stage 1), and every view fades out where its paper meets the backdrop.
 
+The last runs switched to DeepFloyd's XL model (`IF-I-XL` and `IF-II-L`), which follows prompts much better. A wing is about 16 × 32 pixels at stage 1, so its subject has to read as a bold silhouette at that size: a red disc and a koi worked, and a yen sign didn't, since its bars are a pixel thick (and T5 has no `¥` token). With XL, the plain average beat arcimboldo on the koi. Its flat sheet is a real skyline with Tokyo Tower, and arcimboldo's windows turned the whole sheet into branches and blossoms. The final sheet is upscaled to 1024 pixels with Stability's x4 upscaler and printed on A4. The notebook is now trimmed to the two methods and that final run, with its outputs.
+
 ## Next
 
 - Splice an image onto the visible regions using `fold_map.npz`.
