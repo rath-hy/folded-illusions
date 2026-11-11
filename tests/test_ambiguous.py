@@ -27,10 +27,6 @@ def fv():
     return illusion.FoldViews(model, 32)
 
 
-def torch_maps(views):
-    return [dict(sheet_px=torch.as_tensor(v.sheet_px), canvas_px=torch.as_tensor(v.canvas_px)) for v in views]
-
-
 def preds(views, seed=0):
     g = torch.Generator().manual_seed(seed)
     return [torch.randn(6, v.res, v.res, generator=g) for v in views]
@@ -72,15 +68,57 @@ def test_in_place_views_keep_the_sheet_orientation(fv):
     assert np.array_equal(v.show(sheet)[v.paper], sheet[mask])
 
 
-def test_windows_cover_the_whole_sheet(fv):
-    covered = np.any([v.covers() for v in ambiguous.windows(fv, "context")], axis=0)
-    assert covered.all()
+def test_faded_windows_add_up_to_one_everywhere(fv):
+    total = np.zeros(fv.res * fv.res)
+    for v in ambiguous.windows(fv, "context"):
+        np.add.at(total, v.sheet_px, v.weights())
+    assert np.allclose(total, 1)
+
+
+def test_windows_fade_out_at_inner_edges_but_not_at_the_sheets_edge(fv):
+    R = fv.res
+    for v in ambiguous.windows(fv, "context"):
+        w = np.full(R * R, np.nan)
+        w[v.sheet_px] = v.weights()
+        w = w.reshape(R, R)
+        rows, cols = np.nonzero(v.covers())
+        r0, r1, c0, c1 = rows.min(), rows.max(), cols.min(), cols.max()
+        for edge, on_sheet_edge in ((w[r0, c0:c1 + 1], r0 == 0), (w[r1, c0:c1 + 1], r1 == R - 1),
+                                    (w[r0:r1 + 1, c0], c0 == 0), (w[r0:r1 + 1, c1], c1 == R - 1)):
+            if not on_sheet_edge:
+                assert edge.max() < 0.15
+        if r0 == 0 and c0 == 0:
+            assert w[0, 0] == 1
+
+
+def test_fold_in_shards_keep_full_weight_and_fade_across_their_margin(fv):
+    views = [v for v in ambiguous.method_views("fold-in", fv) if "in place" in v.name]
+    assert len(views) == 4
+    for v, shard in zip(views, ambiguous.wing_shards(fv, "front") + ambiguous.wing_shards(fv, "back")):
+        on_shard = shard.ravel()[v.sheet_px]
+        assert on_shard.sum() == shard.sum()
+        assert np.allclose(v.weights()[on_shard], 1)
+        assert v.weights()[~on_shard].min() < 0.5
+
+
+def test_shard_crops_show_each_shard_on_its_own(fv):
+    R = fv.res
+    sheet = np.random.default_rng(0).random((R, R, 3))
+    for side in ("front", "back"):
+        crops = ambiguous.shard_crops(fv, sheet, side)
+        assert len(crops) == 2 and not np.array_equal(crops[0], crops[1])
+        for crop, shard in zip(crops, ambiguous.wing_shards(fv, side)):
+            rows, cols = np.nonzero(shard)
+            g = round(R / 16)
+            assert crop.shape[0] == crop.shape[1] <= max(np.ptp(rows), np.ptp(cols)) + 1 + 2 * g
+            # Every pixel of the shard is in its crop.
+            assert np.isin(sheet[shard].round(9).view([("", float)] * 3), crop.reshape(-1, 3).round(9).view([("", float)] * 3)).all()
 
 
 def test_the_average_method_is_illusions_own_blend(fv):
     views = ambiguous.method_views("average", fv)
     p = preds(views)
-    ours = ambiguous.combine(p, views, torch_maps(views), fv.res)
+    ours = ambiguous.combine(p, views, ambiguous.torch_maps(views), fv.res)
     theirs = illusion._combine(p, illusion._torch_maps(fv, "cpu"), 0.5, fv.res)
     assert torch.allclose(ours, theirs, atol=1e-5)
 
@@ -89,10 +127,10 @@ def test_the_arcimboldo_split_keeps_the_flat_lows_and_the_others_highs(fv):
     from factorized import blur
     views = ambiguous.method_views("arcimboldo", fv)
     p = preds(views)
-    out = ambiguous.combine(p, views, torch_maps(views), fv.res, sigma=3.0)
+    out = ambiguous.combine(p, views, ambiguous.torch_maps(views), fv.res, sigma=3.0)
     high = [k for k, v in enumerate(views) if v.part == "high"]
     plain = [dataclasses.replace(views[k], part="all") for k in high]       # their own weighted average
-    detail = ambiguous.combine([p[k] for k in high], plain, torch_maps(plain), fv.res)
+    detail = ambiguous.combine([p[k] for k in high], plain, ambiguous.torch_maps(plain), fv.res)
     assert torch.allclose(out[:3], blur(p[0][:3], 3.0) + detail[:3] - blur(detail[:3], 3.0), atol=1e-4)
 
 
