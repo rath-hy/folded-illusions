@@ -133,6 +133,8 @@ The new goal is Dalí-style ambiguity. Every piece of the flat sheet should read
 
 The first runs used Tokyo under sakura flat, with a sunset and a cicada on the wings. Arcimboldo was the clear winner: the cicada is drawn with the same branch strokes and blossoms as the rest of the scene, so it belongs to the flat sheet instead of sitting on top of it. The other methods made it either too faint or tacked on. No method made the sunset read, since a sunset is a smooth gradient and the flat sky is already orange. To save GPU time, [`ambiguous_illusions.ipynb`](ambiguous_illusions.ipynb) now runs only arcimboldo and the baseline, with a crisp red sun in place of the sunset.
 
+The first red-sun run showed that stage 1 decides whether a wing gets its subject at all, and that depends mostly on the seed: seed 0 got a clean disc and cicada, and seeds 1 and 2 got a rooftop and branches. Stage 2 then weakened even seed 0's wings, and left straight seams: the folded crane's outline, and a frame along the sheet's border, which shows down the middle of each folded wing because the two wing shards join along the sheet's border. So the notebook now screens many seeds at stage 1 alone, tries stage-2 settings on one good seed (frequency split or none, and how closely stage 2 follows stage 1), and every view fades out where its paper meets the backdrop.
+
 ## Next
 
 - Splice an image onto the visible regions using `fold_map.npz`.

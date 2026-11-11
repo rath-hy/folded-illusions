@@ -91,8 +91,62 @@ def test_windows_fade_out_at_inner_edges_but_not_at_the_sheets_edge(fv):
             assert w[0, 0] == 1
 
 
+def test_windows_fade_toward_the_sheets_border_when_asked(fv):
+    R = fv.res
+    total = np.zeros(R * R)
+    for v in ambiguous.windows(fv, "context", edge_fade=1 / 16):
+        np.add.at(total, v.sheet_px, v.weights())
+    total = total.reshape(R, R)
+    g = round(R / 16)
+    assert np.allclose(total[g:-g, g:-g], 1)
+    for edge in (total[0], total[-1], total[:, 0], total[:, -1]):
+        assert edge.max() < 0.5
+
+
+def test_folded_views_fade_toward_their_outline_but_not_inside(fv):
+    from scipy import ndimage
+    fv = illusion.FoldViews(fv.model, 64)          # the crane is too thin at 32 to have an inside
+    R = fv.res
+    for side in ("front", "back"):
+        v = ambiguous.fold_view(fv, side, side, edge_fade=1 / 32)
+        w = np.full(R * R, np.nan)
+        w[v.canvas_px] = v.weights()
+        w = w.reshape(R, R)
+        outline = v.paper & ~ndimage.binary_erosion(v.paper)
+        deep = ndimage.distance_transform_edt(np.pad(v.paper, 1))[1:-1, 1:-1] > R / 32 + 1
+        deep &= ~np.isnan(w)                          # a few canvas pixels take no sheet pixel
+        assert np.nanmax(w[outline]) < 0.5
+        assert deep.sum() > R and np.allclose(w[deep], 1)
+        # The wing's join is made of the sheet's own border, but on the folded view it's inside the
+        # paper, so it keeps full weight there.
+        r, c = v.sheet_px // R, v.sheet_px % R
+        border = (r == 0) | (c == 0) | (r == R - 1) | (c == R - 1)
+        join = np.zeros((R, R), bool)
+        join.ravel()[v.canvas_px[border]] = True
+        assert np.allclose(w[join & deep], 1) and (join & deep).sum() >= R / 8
+
+
+def test_the_wing_join_is_the_sheets_border(fv):
+    # Why windows must fade at the sheet's border: the two wing shards meet along it.
+    R = fv.res
+    for side in ("front", "back"):
+        v = ambiguous.fold_view(fv, side, side, keep=ambiguous.wing(fv, side))
+        src = v.source.reshape(R, R)
+        sr, sc = src // R, src % R
+        seam = []
+        for dr, dc in ((0, 1), (1, 0)):
+            both = v.paper[:R - dr, :R - dc] & v.paper[dr:, dc:]
+            far = np.hypot(sr[:R - dr, :R - dc] - sr[dr:, dc:], sc[:R - dr, :R - dc] - sc[dr:, dc:]) > 3
+            rr, cc = np.nonzero(both & far)
+            seam += list(src[rr, cc]) + list(src[rr + dr, cc + dc])
+        r, c = np.divmod(np.unique(seam), R)
+        assert len(r) > R / 4
+        # All of it at 256 pixels; at this test's coarse 32, nearly all, give or take a pixel.
+        assert np.mean(np.minimum.reduce([r, c, R - 1 - r, R - 1 - c]) <= 1) > 0.9
+
+
 def test_fold_in_shards_keep_full_weight_and_fade_across_their_margin(fv):
-    views = [v for v in ambiguous.method_views("fold-in", fv) if "in place" in v.name]
+    views = [v for v in ambiguous.method_views("fold-in", fv, edge_fade=0) if "in place" in v.name]
     assert len(views) == 4
     for v, shard in zip(views, ambiguous.wing_shards(fv, "front") + ambiguous.wing_shards(fv, "back")):
         on_shard = shard.ravel()[v.sheet_px]
@@ -116,7 +170,7 @@ def test_shard_crops_show_each_shard_on_its_own(fv):
 
 
 def test_the_average_method_is_illusions_own_blend(fv):
-    views = ambiguous.method_views("average", fv)
+    views = ambiguous.method_views("average", fv, edge_fade=0)
     p = preds(views)
     ours = ambiguous.combine(p, views, ambiguous.torch_maps(views), fv.res)
     theirs = illusion._combine(p, illusion._torch_maps(fv, "cpu"), 0.5, fv.res)
@@ -134,6 +188,16 @@ def test_the_arcimboldo_split_keeps_the_flat_lows_and_the_others_highs(fv):
     assert torch.allclose(out[:3], blur(p[0][:3], 3.0) + detail[:3] - blur(detail[:3], 3.0), atol=1e-4)
 
 
+def test_no_split_is_a_plain_average_of_every_view(fv):
+    # Not the flat view alone: with sigma 0, blur is the identity, and the split would cancel the detail.
+    views = ambiguous.method_views("arcimboldo", fv)
+    p = preds(views)
+    plain = [dataclasses.replace(v, part="all") for v in views]
+    out = ambiguous.combine(p, views, ambiguous.torch_maps(views), fv.res, sigma=0.0)
+    assert torch.allclose(out, ambiguous.combine(p, plain, ambiguous.torch_maps(plain), fv.res))
+    assert not torch.allclose(out[:3], p[0][:3], atol=1e-3)
+
+
 def test_the_sampler_runs_every_method(fv):
     embeds = {k: (torch.zeros(1, 4, 8), torch.full((1, 4, 8), float(i))) for i, k in enumerate(PROMPTS)}
     for method in ambiguous.METHODS:
@@ -141,6 +205,19 @@ def test_the_sampler_runs_every_method(fv):
         s1, s2 = ambiguous.generate(_Pipe(), _Pipe(), views, views, embeds, steps=(3, 2), batch_size=4,
                                     sigma_frac=ambiguous.SIGMA_FRAC.get(method, 0))
         assert s1.shape == s2.shape == (32, 32, 3) and np.isfinite(s2).all()
+
+
+def test_stages_run_apart_give_the_same_sheet_as_together(fv):
+    embeds = {k: (torch.zeros(1, 4, 8), torch.full((1, 4, 8), float(i))) for i, k in enumerate(PROMPTS)}
+    views = ambiguous.method_views("arcimboldo", fv)
+    kw = dict(steps=(3, 2), sigma_frac=(1 / 8, 0.0), batch_size=(12, 4), seed=5)
+    s1, s2 = ambiguous.generate(_Pipe(), _Pipe(), views, views, embeds, **kw)
+    only1, none = ambiguous.generate(_Pipe(), None, views, None, embeds, **kw)
+    assert none is None and np.allclose(only1, s1)
+    again1, again2 = ambiguous.generate(None, _Pipe(), None, views, embeds, stage1=only1, **kw)
+    assert np.allclose(again1, s1, atol=1e-6) and np.allclose(again2, s2, atol=1e-5)
+    other = ambiguous.generate(None, _Pipe(), None, views, embeds, stage1=only1, **dict(kw, seed=6))[1]
+    assert not np.allclose(other, s2)
 
 
 def test_scores_reward_a_wing_that_reads_as_its_subject_only_once_folded(fv):
