@@ -15,3 +15,18 @@
 - **Diffusion paints it (GPU):** Stable Diffusion XL with a canny ControlNet paints the head-on view in bold colors and sharp geometric figures, following the composition's edges and the cube edges. The painting is then mapped back onto the faces.
 
 **[`explorer/`](explorer/)** is the provenance explorer: a page where you click any face of the painted model to trace it back through the edge lines it followed, the composition fragment it came from, its window onto the 3D guitar, and where it sits in the head-on outline. The notebook's last cell downloads `cubism-painting.zip`; then, from this folder, `python explorer/build_explorer.py OUT_DIR cubism-painting.zip` writes the page and its data to `OUT_DIR`. Without a zip it uses a stand-in painting.
+
+## The Bayon face (Nov 17)
+
+**[`bayon.ipynb`](bayon.ipynb)** turns the piece into an homage to Cambodia. Head-on, the model shows a smiling face of the Bayon, Angkor's temple of faces. Each of the 25 faces is painted separately from its own prompt, so tilting the model breaks the face into scenes of home.
+
+- **The photo sets the composition.** You place the model on it with `FIT`. Faces are numbered 1 to 25, top to bottom and left to right.
+- **The guide is one line drawing of the whole photo,** saved to the working folder as `guide.png`. Each face cuts out the part it covers and unshears it into an upright square, so lines run on across face borders. Lines are thinned and redrawn at one width, so they look the same on every face whatever the photo's resolution.
+- **Canny doesn't work on this photo.** On weathered stone it finds lichen and block joints, not the face. The default is ControlNet's learned lineart detector, run after edge-preserving smoothing (`smooth=4`, `resolution=384`, `threshold=80`). That gives the crown, eyes, nose and smile, plus some block joints. The guide is a plain image, so the plan is to clean it up by hand.
+- **Each face is painted upright,** as you'd see it with the model tilted straight toward that face's axis, turned so its top is as close to up as possible and never mirrored.
+- **Painting only adds candidates,** numbered per face, each saved with its prompt, seed and settings. Keeping one copies it aside. Kept faces are never repainted, so you can keep trying prompts on the rest. Everything lives in a Google Drive folder, so it survives Colab disconnects.
+- **`bayon.py`** holds the code; [`tests/test_bayon.py`](../tests/test_bayon.py) covers the numbering, the face frames, cutting the guide into faces, and the store.
+
+**How we know:** software only. The whole notebook ran on CPU with the real photo and the real lineart guide, with a stand-in painter (it fills each face with a flat color behind its guide lines): painting, keeping, repainting a kept face (its choice stayed) and the board all work. SDXL itself hasn't run on these guides yet.
+
+The photo isn't committed; we need its source and license recorded before we publish anything made from it.
