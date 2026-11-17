@@ -1,0 +1,481 @@
+<title>Folded Guitar Provenance</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the folded model as a workbench on the left; the trail of one face, read top to bottom, on the right. */
+:root {
+  --paper: #ecebe6;
+  --sheet: #f8f7f3;
+  --ink: #1d1c1f;
+  --muted: #5d5b63;
+  --rule: #cfccc4;
+  --select: #e8b400;
+  --x: #c4432b;
+  --y: #2f56b5;
+  --z: #2c8a5c;
+  --stage: #dedcd5;
+  --display: "Stardos Stencil", "Rockwell", Georgia, serif;
+  --body: "Work Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #18181b; --sheet: #222226; --ink: #ecebe6; --muted: #a3a1aa; --rule: #3a3a40;
+    --select: #ffc81f; --x: #ec6a4f; --y: #6f8ff0; --z: #4fbf8a; --stage: #2a2a2f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #18181b; --sheet: #222226; --ink: #ecebe6; --muted: #a3a1aa; --rule: #3a3a40;
+  --select: #ffc81f; --x: #ec6a4f; --y: #6f8ff0; --z: #4fbf8a; --stage: #2a2a2f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 5vw, 50px); line-height: 1; margin: 0; letter-spacing: 0.02em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 68ch; }
+.banner { border: 1px dashed var(--muted); padding: 8px 12px; color: var(--muted); font-size: 13px; max-width: 68ch; }
+.main { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: sticky; top: env(safe-area-inset-top, 0px); display: grid; gap: 10px; }
+@media (max-width: 900px) { .stage { position: static; } }
+#model { width: 100%; aspect-ratio: 1; max-width: 100%; background: var(--stage); display: block; cursor: grab; touch-action: none; }
+#model:active { cursor: grabbing; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.group .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-right: 4px; }
+button.seg {
+  font: 500 13px var(--body); color: var(--ink); background: var(--sheet); border: 1px solid var(--rule);
+  padding: 5px 10px; cursor: pointer;
+}
+button.seg[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+button.seg:focus-visible, button.chip:focus-visible, #model:focus-visible { outline: 2px solid var(--select); outline-offset: 2px; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+.trail { display: grid; gap: 14px; min-width: 0; }
+.facehead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
+.facehead h2 { font-family: var(--display); font-size: 30px; margin: 0; line-height: 1.1; }
+.axis-pill { font: 500 12px var(--mono); color: #fff; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+.facehead .sub { color: var(--muted); }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+ol.steps > li { counter-increment: step; background: var(--sheet); border: 1px solid var(--rule); padding: 12px; display: grid; gap: 10px; grid-template-columns: 112px minmax(0, 1fr); align-items: start; }
+ol.steps > li.wide { grid-template-columns: minmax(0, 1fr); }
+.step-title { font-family: var(--display); font-size: 19px; line-height: 1.15; margin: 0; }
+.step-title::before { content: counter(step) "  "; color: var(--muted); }
+.step-text { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 60ch; }
+canvas.tile { width: 112px; height: 112px; display: block; image-rendering: auto; border: 1px solid var(--rule); background: var(--stage); }
+dl.recipe { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 8px 0 0; font-size: 14px; }
+dl.recipe dt { color: var(--muted); }
+dl.recipe dd { margin: 0; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+#mini { width: 100%; aspect-ratio: 4 / 3; max-width: 100%; display: block; background: var(--stage); cursor: grab; touch-action: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.headon { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; }
+.headon img, .headon svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.headon svg polygon { cursor: pointer; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+button.chip { font: 500 13px var(--mono); background: transparent; color: var(--ink); border: 1px solid var(--rule); padding: 3px 8px; cursor: pointer; }
+button.chip:hover { border-color: var(--ink); }
+.none { color: var(--muted); font-size: 14px; margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Folded Guitar Provenance</h1>
+    <p class="lede">Every face of the folded cube tessellation carries one fragment of a cubist guitar. Click a face to trace how it was made, from the paint back to the 3D guitar it was cut from.</p>
+    <p class="banner" id="standin" hidden>Stand-in colors: these faces are painted with flat bold colors laid over the composition, until the real Stable Diffusion painting is exported from the notebook. Everything else on this page is the real composition.</p>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="The folded model">
+      <canvas id="model" tabindex="0" aria-label="The folded model. Drag to turn it; click a face to trace it."></canvas>
+      <div class="controls">
+        <div class="group" role="group" aria-label="View">
+          <span class="label">View</span>
+          <button class="seg" data-view="head-on" aria-pressed="true">Head-on</button>
+          <button class="seg" data-view="0" aria-pressed="false">Tilt to x</button>
+          <button class="seg" data-view="1" aria-pressed="false">Tilt to y</button>
+          <button class="seg" data-view="2" aria-pressed="false">Tilt to z</button>
+        </div>
+        <div class="group" role="group" aria-label="Faces show">
+          <span class="label">Faces show</span>
+          <button class="seg" data-layer="painting" aria-pressed="true">Painting</button>
+          <button class="seg" data-layer="edges" aria-pressed="false">Edges</button>
+          <button class="seg" data-layer="composition" aria-pressed="false">Composition</button>
+        </div>
+      </div>
+      <p class="hint">Drag to turn the model. Head-on is the artwork: the guitar's outline is clearest there. Tilted toward an axis, you see only that axis's fragments.</p>
+    </section>
+
+    <section class="trail" aria-live="polite">
+      <div class="facehead">
+        <h2 id="f-title">Face</h2>
+        <span class="axis-pill" id="f-axis">x</span>
+        <span class="sub" id="f-sub"></span>
+      </div>
+      <ol class="steps">
+        <li>
+          <canvas class="tile" id="t-paint" width="128" height="128"></canvas>
+          <div><p class="step-title">The painted face</p>
+            <p class="step-text">This face's piece of the head-on painting, as it's printed on the paper.</p></div>
+        </li>
+        <li>
+          <canvas class="tile" id="t-edges" width="128" height="128"></canvas>
+          <div><p class="step-title">The lines it had to follow</p>
+            <p class="step-text">The painting was made with a ControlNet that keeps to these edges: the guitar's outline, the fragment's shapes, and the face's own border.</p></div>
+        </li>
+        <li>
+          <canvas class="tile" id="t-comp" width="128" height="128"></canvas>
+          <div><p class="step-title">The fragment it came from</p>
+            <p class="step-text" id="t-comp-text"></p>
+            <dl class="recipe" id="recipe"></dl></div>
+        </li>
+        <li class="wide">
+          <div><p class="step-title">Where it looked from</p>
+            <p class="step-text" id="t-mini-text"></p></div>
+          <canvas id="mini" aria-label="The 3D guitar, with this face's window onto it. Drag to turn."></canvas>
+          <div class="legend">
+            <span style="--c: var(--select)">this face's window</span>
+            <span style="--c: var(--x)">x windows: front views</span>
+            <span style="--c: var(--y)">y windows: side views</span>
+            <span style="--c: var(--z)">z windows: down the neck</span>
+          </div>
+        </li>
+        <li class="wide">
+          <div><p class="step-title">Where it sits in the outline</p>
+            <p class="step-text" id="t-out-text"></p></div>
+          <div class="headon">
+            <img src="head_on_composition.png" alt="The head-on composition: the guitar's outline filled with fragments.">
+            <svg id="headon-svg" viewBox="0 0 512 512" aria-label="Faces of the head-on composition; click one to trace it."></svg>
+          </div>
+        </li>
+      </ol>
+      <div>
+        <p class="step-title" style="margin-bottom:6px" id="same-title">Other faces showing this part</p>
+        <div class="chips" id="same"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+
+const data = await (await fetch("data.json")).json();
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const AXES = ["x", "y", "z"];
+const AXIS_IDX = { x: 0, y: 1, z: 2 };
+const VIEW_NAMES = { x: "the front", y: "the side", z: "down the neck" };
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+document.getElementById("standin").hidden = !data.stand_in;
+
+// ---------- Atlases ----------
+const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+const layers = ["painting", "edges", "composition"];
+const atlasImgs = Object.fromEntries(await Promise.all(layers.map(async (l) => [l, await loadImg(`atlas_${l}.png`)])));
+const tileRect = (i) => { const r = Math.floor(i / data.grid), c = i % data.grid; return [c * data.tile, r * data.tile, data.tile, data.tile]; };
+function drawTile(canvas, layer, i) {
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(atlasImgs[layer], ...tileRect(i), 0, 0, canvas.width, canvas.height);
+}
+const atlasTex = {};
+for (const l of layers) {
+  const t = new THREE.Texture(atlasImgs[l]);
+  t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; t.anisotropy = 4;
+  atlasTex[l] = t;
+}
+
+// ---------- The folded model ----------
+const modelCanvas = document.getElementById("model");
+const renderer = new THREE.WebGLRenderer({ canvas: modelCanvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const all = data.faces.flatMap((f) => f.corners);
+const center = new THREE.Vector3(...[0, 1, 2].map((k) => all.reduce((s, p) => s + p[k], 0) / all.length));
+let radius = 0;
+for (const p of all) radius = Math.max(radius, center.distanceTo(new THREE.Vector3(...p)));
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+camera.up.set(...data.head_on_up);
+const HEAD_ON = new THREE.Vector3(1, 1, 1).normalize();
+camera.position.copy(center).addScaledVector(HEAD_ON, 20);
+const controls = new OrbitControls(camera, modelCanvas);
+controls.target.copy(center);
+controls.enablePan = false; controls.enableZoom = true; controls.minZoom = 0.7; controls.maxZoom = 3;
+controls.update();
+
+const faceMeshes = [];
+const g = data.grid;
+for (const f of data.faces) {
+  const [a, b, c, d] = f.corners;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute([...a, ...b, ...c, ...a, ...c, ...d], 3));
+  const r = Math.floor(f.id / g), col = f.id % g;
+  const uv = (s, q) => [(col + s) / g, 1 - (r + q) / g];
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute([...uv(0, 0), ...uv(1, 0), ...uv(1, 1), ...uv(0, 0), ...uv(1, 1), ...uv(0, 1)], 2));
+  const lit = data.lit[AXIS_IDX[f.axis]];
+  const mat = new THREE.MeshBasicMaterial({ map: atlasTex.painting, side: THREE.DoubleSide, color: new THREE.Color(lit, lit, lit) });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.face = f.id;
+  scene.add(mesh); faceMeshes.push(mesh);
+}
+
+function fatLines(points, color, width, opacity = 1) {
+  const geo = new LineSegmentsGeometry().setPositions(points);
+  const mat = new LineMaterial({ color: new THREE.Color(color), linewidth: width, transparent: opacity < 1, opacity, depthTest: false });
+  mat.resolution.set(modelCanvas.clientWidth || 600, modelCanvas.clientHeight || 600);
+  const l = new LineSegments2(geo, mat); l.renderOrder = 10; return l;
+}
+const loopSegs = (pts, lift) => pts.flatMap((p, i) => [...p.map((v, k) => v + lift[k]), ...pts[(i + 1) % pts.length].map((v, k) => v + lift[k])]);
+let highlight = new THREE.Group(); scene.add(highlight);
+
+function sizeModel() {
+  const w = modelCanvas.clientWidth, h = modelCanvas.clientHeight;
+  renderer.setSize(w, h, false);
+  const aspect = w / h, s = radius * 1.08;
+  camera.left = -s * aspect; camera.right = s * aspect; camera.top = s; camera.bottom = -s;
+  camera.updateProjectionMatrix();
+  highlight.traverse((o) => o.material?.resolution?.set(w, h));
+}
+new ResizeObserver(sizeModel).observe(modelCanvas);
+
+// Snap to head-on or an axis.
+let tween = null;
+function snapTo(dir) {
+  const from = camera.position.clone().sub(center).normalize();
+  const to = dir.clone().normalize();
+  if (reduced) { camera.position.copy(center).addScaledVector(to, 20); controls.update(); return; }
+  tween = { from, to, t0: performance.now(), dur: 700 };
+}
+const viewButtons = [...document.querySelectorAll("[data-view]")];
+viewButtons.forEach((btn) => btn.addEventListener("click", () => {
+  viewButtons.forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+  const v = btn.dataset.view;
+  snapTo(v === "head-on" ? HEAD_ON : new THREE.Vector3(...[0, 1, 2].map((k) => (k === +v ? 1 : 0))));
+}));
+controls.addEventListener("start", () => { tween = null; viewButtons.forEach((b) => b.setAttribute("aria-pressed", "false")); });
+
+const layerButtons = [...document.querySelectorAll("[data-layer]")];
+layerButtons.forEach((btn) => btn.addEventListener("click", () => {
+  layerButtons.forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+  for (const m of faceMeshes) { m.material.map = atlasTex[btn.dataset.layer]; m.material.needsUpdate = true; }
+}));
+
+// Click a face (a click, not a drag).
+const ray = new THREE.Raycaster();
+let down = null;
+modelCanvas.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
+modelCanvas.addEventListener("pointerup", (e) => {
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
+  const r = modelCanvas.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const hit = ray.intersectObjects(faceMeshes)[0];
+  if (hit) select(hit.object.userData.face);
+});
+modelCanvas.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    select((current + (e.key === "ArrowRight" ? 1 : data.faces.length - 1)) % data.faces.length);
+  }
+});
+
+// ---------- The 3D guitar ----------
+const miniCanvas = document.getElementById("mini");
+const mini = new THREE.WebGLRenderer({ canvas: miniCanvas, antialias: true, alpha: true });
+mini.setPixelRatio(Math.min(devicePixelRatio, 2));
+const miniScene = new THREE.Scene();
+const miniCam = new THREE.PerspectiveCamera(35, 4 / 3, 0.1, 100);
+const miniControls = new OrbitControls(miniCam, miniCanvas);
+miniControls.enablePan = false;
+miniScene.add(new THREE.AmbientLight(0xffffff, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(3, 2, 6); miniScene.add(sun);
+
+const G = data.guitar;
+const frame = new THREE.Matrix4().makeBasis(new THREE.Vector3(...G.frame[0]), new THREE.Vector3(...G.frame[1]), new THREE.Vector3(...G.frame[2]));
+const guitar = new THREE.Group(); guitar.matrixAutoUpdate = false; guitar.matrix.copy(frame);
+const wood = new THREE.MeshLambertMaterial({ color: 0xc89a5a });
+const dark = new THREE.MeshLambertMaterial({ color: 0x4a3322 });
+const shape = new THREE.Shape(G.body.map(([u, v]) => new THREE.Vector2(u, v)));
+const bodyGeo = new THREE.ExtrudeGeometry(shape, { depth: G.body_w[1] - G.body_w[0], bevelEnabled: false, curveSegments: 4 });
+bodyGeo.translate(0, 0, G.body_w[0]);
+guitar.add(new THREE.Mesh(bodyGeo, wood));
+for (const b of G.boxes) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(b.u[1] - b.u[0], b.v[1] - b.v[0], b.w[1] - b.w[0]), b.name === "bridge" ? dark : b.name === "neck" ? dark : wood);
+  m.position.set((b.u[0] + b.u[1]) / 2, (b.v[0] + b.v[1]) / 2, (b.w[0] + b.w[1]) / 2);
+  guitar.add(m);
+}
+const hole = new THREE.Mesh(new THREE.CircleGeometry(G.soundhole.r, 40), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+hole.position.set(G.soundhole.u, G.soundhole.v, G.soundhole.w + 0.003);
+guitar.add(hole);
+miniScene.add(guitar);
+
+const axisColor = () => [css("--x"), css("--y"), css("--z")];
+let windowsGroup = new THREE.Group(); miniScene.add(windowsGroup);
+let selGroup = new THREE.Group(); miniScene.add(selGroup);
+function drawWindows() {
+  miniScene.remove(windowsGroup); windowsGroup = new THREE.Group();
+  const cols = axisColor();
+  for (const f of data.faces) {
+    const pts = f.window.map((p) => new THREE.Vector3(...p));
+    const geo = new THREE.BufferGeometry().setFromPoints([...pts, pts[0]]);
+    windowsGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: cols[AXIS_IDX[f.axis]], transparent: true, opacity: 0.55 })));
+  }
+  miniScene.add(windowsGroup);
+}
+drawWindows();
+
+function sizeMini() {
+  const w = miniCanvas.clientWidth, h = miniCanvas.clientHeight;
+  mini.setSize(w, h, false); miniCam.aspect = w / h; miniCam.updateProjectionMatrix();
+  selGroup.traverse((o) => o.material?.resolution?.set(w, h));
+}
+new ResizeObserver(sizeMini).observe(miniCanvas);
+
+function miniSelect(f) {
+  miniScene.remove(selGroup); selGroup = new THREE.Group();
+  const sel = css("--select");
+  const w = f.window.map((p) => new THREE.Vector3(...p));
+  const d = new THREE.Vector3(...f.direction);
+  // The window, showing what it saw.
+  const tc = document.createElement("canvas"); tc.width = tc.height = 128; drawTile(tc, "composition", f.id);
+  const tex = new THREE.CanvasTexture(tc); tex.colorSpace = THREE.SRGBColorSpace;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute([w[0], w[1], w[2], w[0], w[2], w[3]].flatMap((p) => p.toArray()), 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0], 2));
+  const lift = d.clone().multiplyScalar(1.6);
+  const pane = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }));
+  pane.position.copy(lift); selGroup.add(pane);
+  const segs = [];
+  for (let i = 0; i < 4; i++) {
+    const a = w[i].clone().add(lift), b = w[(i + 1) % 4].clone().add(lift);
+    segs.push(...a.toArray(), ...b.toArray());
+    // Sight lines: from the lifted window down through the guitar.
+    const far = w[i].clone().addScaledVector(d, -1.2);
+    segs.push(...a.toArray(), ...far.toArray());
+  }
+  const lg = new LineSegmentsGeometry().setPositions(segs);
+  const lm = new LineMaterial({ color: new THREE.Color(sel), linewidth: 2.5 });
+  lm.resolution.set(miniCanvas.clientWidth, miniCanvas.clientHeight);
+  selGroup.add(new LineSegments2(lg, lm));
+  miniScene.add(selGroup);
+  // Look at the window from beside its line of sight.
+  const mid = w.reduce((s, p) => s.add(p), new THREE.Vector3()).multiplyScalar(0.25);
+  const side = new THREE.Vector3().crossVectors(d, new THREE.Vector3(...G.frame[0])).normalize();
+  if (side.lengthSq() < 1e-6) side.set(0, 0, 1);
+  miniControls.target.copy(mid);
+  miniCam.up.set(...G.frame[0]);
+  miniCam.position.copy(mid).addScaledVector(d, 4.2).addScaledVector(side, 3.2);
+  miniControls.update();
+}
+
+// ---------- The trail ----------
+const svg = document.getElementById("headon-svg");
+const NS = "http://www.w3.org/2000/svg";
+const polys = data.faces.map((f) => {
+  const p = document.createElementNS(NS, "polygon");
+  p.setAttribute("points", f.head_on.map((q) => q.join(",")).join(" "));
+  p.addEventListener("click", () => select(f.id));
+  svg.appendChild(p); return p;
+});
+const pct = (x) => `${Math.round(x * 100)}%`;
+const deg = (x) => `${x >= 0 ? "" : "−"}${Math.abs(x).toFixed(0)}°`;
+let current = 0;
+
+function select(id) {
+  current = id;
+  const f = data.faces[id];
+  const cols = axisColor();
+  const ac = cols[AXIS_IDX[f.axis]];
+  document.getElementById("f-title").textContent = `Face ${id + 1}`;
+  const pill = document.getElementById("f-axis");
+  pill.textContent = `${f.axis} face`; pill.style.background = ac;
+  document.getElementById("f-sub").textContent = `the ${f.part}, from ${VIEW_NAMES[f.axis]}`;
+  drawTile(document.getElementById("t-paint"), "painting", id);
+  drawTile(document.getElementById("t-edges"), "edges", id);
+  drawTile(document.getElementById("t-comp"), "composition", id);
+  document.getElementById("t-comp-text").textContent =
+    `A close-up of the guitar's ${f.part}, rendered from a 3D guitar turned so that x faces see its front, y its side, and z looks down its neck. Gray marks where the view misses the guitar; outside the outline, the face stays plain.`;
+  document.getElementById("recipe").innerHTML = [
+    ["Part", f.part],
+    ["Seen from", `${f.axis}, tilted ${f.tilt.toFixed(0)}° off the axis`],
+    ["Rolled", deg(f.roll)],
+    ["Framing", `${f.zoom.toFixed(2)} guitar units per face edge`],
+    ["Inside the outline", pct(f.inside)],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  document.getElementById("t-mini-text").textContent =
+    `The yellow pane is this face's window, lifted toward the viewer. Its sight lines run along its own direction, ${f.tilt.toFixed(0)}° off the ${f.axis} axis, down to the guitar; what they hit is the fragment above. The thin frames are the other 24 windows, colored by axis.`;
+  document.getElementById("t-out-text").textContent = f.inside > 0.99
+    ? "This face lies entirely inside the guitar's head-on outline, so all of it shows guitar."
+    : f.inside < 0.01
+      ? "This face lies outside the guitar's head-on outline, so it shows no guitar: it's part of the ground around it."
+      : `${pct(f.inside)} of this face lies inside the guitar's head-on outline. Only that part shows guitar, which is why the outline reads head-on.`;
+  // Head-on map.
+  const sel = css("--select");
+  polys.forEach((p, i) => {
+    const same = data.faces[i].part === f.part && i !== id && data.faces[i].inside > 0;
+    p.setAttribute("fill", i === id ? sel : css("--ink"));
+    p.setAttribute("fill-opacity", i === id ? "0.55" : "0");
+    p.setAttribute("stroke", i === id ? sel : same ? css("--ink") : css("--muted"));
+    p.setAttribute("stroke-width", i === id ? "3" : same ? "2" : "0.75");
+    p.setAttribute("stroke-dasharray", same ? "5 4" : "");
+  });
+  // Same part elsewhere.
+  const others = data.faces.filter((o) => o.part === f.part && o.id !== id);
+  document.getElementById("same-title").textContent = `Other faces showing the ${f.part}`;
+  const chips = document.getElementById("same");
+  chips.innerHTML = "";
+  if (!others.length) chips.innerHTML = `<p class="none">No other face shows the ${f.part}.</p>`;
+  for (const o of others) {
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = `Face ${o.id + 1} · ${o.axis}`;
+    b.style.borderLeft = `4px solid ${cols[AXIS_IDX[o.axis]]}`;
+    b.addEventListener("click", () => select(o.id));
+    chips.appendChild(b);
+  }
+  // Highlights on the model.
+  scene.remove(highlight); highlight = new THREE.Group();
+  const lift = (k) => [1, 1, 1].map((v) => v * 0.004 * (k + 1));
+  highlight.add(fatLines(loopSegs(f.corners, lift(1)), sel, 4));
+  const otherSegs = others.flatMap((o) => loopSegs(o.corners, lift(0)));
+  if (otherSegs.length) highlight.add(fatLines(otherSegs, css("--ink"), 2, 0.9));
+  scene.add(highlight);
+  sizeModel();
+  miniSelect(f);
+}
+
+// Start on a face that's mostly inside the outline, showing the soundhole if one does.
+const start = [...data.faces].sort((a, b) => (b.part === "soundhole") - (a.part === "soundhole") || b.inside - a.inside)[0];
+sizeModel(); sizeMini();
+select(start.id);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawWindows(); select(current); });
+new MutationObserver(() => { drawWindows(); select(current); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+function loop(now) {
+  if (tween) {
+    const t = Math.min(1, (now - tween.t0) / tween.dur), e = (1 - Math.cos(Math.PI * t)) / 2;
+    const dir = tween.from.clone().lerp(tween.to, e).normalize();
+    camera.position.copy(center).addScaledVector(dir, 20);
+    controls.update();
+    if (t >= 1) tween = null;
+  }
+  renderer.render(scene, camera);
+  mini.render(miniScene, miniCam);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>

@@ -13,6 +13,7 @@ Team onboarding doc: [Folded Illusions: Team Onboarding](https://claude.ai/artif
 | Anamorphosis | Holbein's face centered on a cube corner | `fold-map/cube_anamorphosis.ipynb` | Printed and folded; looks good by eye, error not measured |
 | Same pixels | Buddhist imagery on a fortune teller | `same-pixels/same_pixels.ipynb` | Method works on flat images, nothing folded yet |
 | Visual cryptography | Schrödinger's box on the seamless cube | `schrodingers-box/schrodingers_box.ipynb` | Notebook covers an older hinged-box design; needs rebuilding |
+| Cubism | One subject from three viewpoints on a cube tessellation, one per cube axis | `cubism/cubism.ipynb` | Virtual demo only: the finished model's faces as ideal squares, no paper or visibility map yet |
 
 ## Layout
 
@@ -28,10 +29,11 @@ fold-map/           visibility maps, diffusion on folds, anamorphosis
   prints/           A4 PDFs, including the ChArUco board
 same-pixels/        same-pixels method (Stable Diffusion 3.5)
 schrodingers-box/   visual cryptography
+cubism/             one subject from three viewpoints on a cube tessellation
 tests/              smoke tests and repo rules, run on every pull request
 ```
 
-The three project folders don't share code. Run notebooks from inside their own folder.
+The project folders don't share code. Run notebooks from inside their own folder.
 
 ## Get started
 
@@ -50,7 +52,7 @@ jupyter notebook cube_anamorphosis.ipynb
 
 These need a GPU, and they use Hugging Face models you have to accept first.
 
-1. Open a notebook in Colab: [illusions](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/illusions.ipynb), [factorized_illusions](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/factorized_illusions.ipynb), [ambiguous_illusions](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/ambiguous_illusions.ipynb), [story](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/story.ipynb), [story_more_pixels](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/story_more_pixels.ipynb), or [same_pixels](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/same-pixels/same_pixels.ipynb). For another branch, replace `main` in the link. The setup cell clones `main`, so a notebook relying on unmerged code needs its branch cloned instead.
+1. Open a notebook in Colab: [illusions](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/illusions.ipynb), [factorized_illusions](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/factorized_illusions.ipynb), [ambiguous_illusions](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/ambiguous_illusions.ipynb), [story](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/story.ipynb), [story_more_pixels](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/fold-map/story_more_pixels.ipynb), [same_pixels](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/same-pixels/same_pixels.ipynb), or [cubism](https://colab.research.google.com/github/rath-hy/folded-illusions/blob/main/cubism/cubism.ipynb). For another branch, replace `main` in the link. The setup cell clones `main`, so a notebook relying on unmerged code needs its branch cloned instead.
 2. Choose Runtime → Change runtime type → T4 GPU.
 3. On Hugging Face, accept the licenses for [IF-I-M](https://huggingface.co/DeepFloyd/IF-I-M-v1.0) and [IF-II-M](https://huggingface.co/DeepFloyd/IF-II-M-v1.0), or [SD 3.5 Medium](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium) for `same_pixels`.
 4. Create a Hugging Face read token, then choose Runtime → Run all and paste it when asked.
