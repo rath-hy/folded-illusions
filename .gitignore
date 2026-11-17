@@ -6,3 +6,6 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# Local working folder of cubism/bayon.ipynb (photo, guide, paintings). Lives on Drive in Colab.
+bayon-work/
