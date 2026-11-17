@@ -30,3 +30,18 @@
 **How we know:** software only. The whole notebook ran on CPU with the real photo and the real lineart guide, with a stand-in painter (it fills each face with a flat color behind its guide lines): painting, keeping, repainting a kept face (its choice stayed) and the board all work. SDXL itself hasn't run on these guides yet.
 
 The photo isn't committed; we need its source and license recorded before we publish anything made from it.
+
+## The Bayon study (Nov 17, later)
+
+**The photo guide didn't work.** Rath tried it in Colab, and the paintings were bad, mostly because the line drawing was far too detailed. Two attempts at simpler line drawings also failed. Straight lines found automatically still traced the stone. A hand-placed set of lines read as a face but looked like a totem, not cubism.
+
+**So the composition is now a study:** [`bayon-study.svg`](bayon-study.svg), a flat geometric painting of the face in about 90 gray polygons. Rath made it with Google AI Studio. It replaces the photo, so the photo-license question no longer applies to this piece.
+
+- **Cropped** by 1/8 on the left, right and bottom to trim the empty border (`CROP`). The model spans the crop's full width (`FIT` width 1.0), so about 30 units at the top and bottom fall off it.
+- **Read as shapes, not pixels.** The polygons are drawn straight into each face's 1024-pixel square, so edges stay crisp. Hatching and the canvas texture are ignored.
+- **Each polygon is a chunk with a target shade** from its fill, measured as CIELAB lightness. The study's range is stretched to L* 15–92, so the darkest chunks are dark but can still hold color, and black edges stand out on them.
+- **Painting** uses SDXL img2img plus the canny ControlNet. It starts from the face's shades (`strength=0.8`) and follows its edges, drawn thin (4 px) as canny would draw them.
+- **Finishing** moves each chunk's average lightness 80% of the way to its target, keeping the painting's colors and texture. Then it draws every edge on top in black, 24 px on a 1024-pixel face. So a chunk can be any color, but it's about as light as the study says. Candidates are saved raw and finished when shown, so `FINISH` can change without repainting.
+- **The working folder moved** to `MyDrive/folded-illusions/bayon-study`, so the photo-guide candidates don't mix in.
+
+**How we know:** software only. Tests cover reading and cropping the SVG, which faces an edge lands on, the shades, finishing (80% of the way, texture kept, solid black edges about 24 px wide) and the board. The whole notebook ran on CPU with a stand-in painter (smooth random color), including the paint, keep, repaint and board loop. Head-on, the face reads clearly even with random color in every face. SDXL hasn't run on it yet.

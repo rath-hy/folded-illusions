@@ -1,8 +1,11 @@
 """A smiling Bayon face on the cube tessellation, painted one face at a time.
 
-Head-on, the model shows the face in a photo: each of its 25 faces takes the edges of the part of the
-photo it covers, and Stable Diffusion XL with a canny ControlNet paints that face from its own prompt.
-Faces you like are kept on disk, so trying a new prompt on one face never touches the others.
+Head-on, the model shows the face in a study: a flat geometric painting made of polygons (an SVG). Each
+of its 25 faces takes the part of the study it covers, and Stable Diffusion XL paints it from its own
+prompt, starting from the study's shades and following its edges. Finishing then pins each polygon's
+lightness close to the study's and draws the study's edges on top, thick and black, so the face reads
+whatever colors each painting uses. Faces you like are kept on disk, so trying a new prompt on one face
+never touches the others.
 
 The geometry (faces, camera, bounds, render) is the same as in cubism.ipynb. No GPU is needed here;
 the notebook brings the painter.
@@ -153,13 +156,14 @@ def to_texture(n, picture, res=256):
 
 
 # ---------------------------------------------------------------------------------------------------
-# Placing the photo. FIT says where the model sits in the photo, head-on: its center as fractions of
-# the photo's width and height, and its width (the model's widest extent) as a fraction of the photo's.
-DEFAULT_FIT = dict(x=0.5, y=0.5, width=0.9)
+# Placing a picture. FIT says where the model sits on a picture (the study, or any image), head-on: its
+# center as fractions of the picture's width and height, and its width (the model's widest extent) as a
+# fraction of the picture's.
+DEFAULT_FIT = dict(x=0.5, y=0.5, width=1.0)
 
 
 def _photo_map(photo_shape, fit):
-    """Screen coordinates head-on -> photo pixels: returns a function of (sx, sy)."""
+    """Screen coordinates head-on -> picture pixels: returns a function of (sx, sy)."""
     H, W = photo_shape[:2]
     x0, x1, y0, y1 = bounds(camera(0.0), faces())
     scale = fit["width"] * W / (x1 - x0)
@@ -167,138 +171,28 @@ def _photo_map(photo_shape, fit):
     return lambda sx, sy: (fit["x"] * W + (sx - mx) * scale, fit["y"] * H - (sy - my) * scale)
 
 
-def face_photo(photo, n, fit=DEFAULT_FIT, size=1024, pad=0):
-    """The part of the photo face n covers head-on, unsheared into its upright square. Parts of the
-    face that fall outside the photo are black. pad: extra pixels of the surroundings on every side."""
-    photo = np.asarray(photo)
+def _face_affine(photo_shape, n, fit, size):
+    """(p0, A): face n's upright picture pixel (col, row) sits at picture point p0 + A @ (col + 0.5, row + 0.5)."""
     _, r, u = camera(0.0)
-    to_px = _photo_map(photo.shape, fit)
+    to_px = _photo_map(photo_shape, fit)
     origin, R, D = frame(n)
+    p0, pr, pd = (np.array(to_px(P @ r, P @ u)) for P in (origin, origin + R, origin + D))
+    return p0, np.stack([(pr - p0) / size, (pd - p0) / size], 1)
 
-    def px(P):
-        return to_px(P @ r, P @ u)
 
-    p0, pr, pd = (np.array(px(origin + a * R + b * D)) for a, b in ((0, 0), (1, 0), (0, 1)))
-    # Picture pixel (col, row) -> photo pixel, as an affine map on pixel centers.
-    A = np.stack([(pr - p0) / size, (pd - p0) / size], 1)
+def face_photo(photo, n, fit=DEFAULT_FIT, size=1024, pad=0):
+    """The part of a picture face n covers head-on, unsheared into its upright square. Parts of the face
+    that fall outside the picture are black. pad: extra pixels of the surroundings on every side."""
+    photo = np.asarray(photo)
+    p0, A = _face_affine(photo.shape, n, fit, size)
     t = p0 + A @ (np.array([0.5, 0.5]) - pad)
     M = np.hstack([A, t[:, None]]).astype(np.float32)
     return cv2.warpAffine(photo, M, (size + 2 * pad,) * 2, flags=cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP,
                           borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
 
-# ---------------------------------------------------------------------------------------------------
-# The guide: one line drawing of the whole photo, white lines on black, at the photo's size. Every face
-# cuts its ControlNet guide from it, so lines run on across face borders. It's an ordinary image: save
-# it, clean it up in any paint program (or draw your own), and load it back.
-#
-# method "lineart": a learned line detector (the lineart annotator from ControlNet), run on the photo
-#   after edge-preserving smoothing. It draws like an artist: contours of the face, eyes, nose, lips and
-#   crown, and far less of the stone's texture than canny. Needs PyTorch and controlnet_aux (Colab).
-#   smooth: passes of edge-preserving blur first; more drops more texture.
-#   resolution: the size the detector works at; lower gives simpler, bolder lines.
-#   threshold: 0-255; higher keeps only the stronger lines.
-# method "canny": plain canny, no downloads. On weathered stone it mostly finds texture.
-#   blur (photo pixels), low, high: canny's settings.
-# Both: min_area drops line fragments smaller than this many photo pixels.
-DEFAULT_GUIDE = dict(method="lineart", smooth=4, resolution=384, threshold=80, min_area=40,
-                     blur=2.5, low=40, high=110)
-_detector = None
-
-
-def make_guide(photo, guide=DEFAULT_GUIDE):
-    """The photo's line drawing: a uint8 array the size of the photo, 255 on lines."""
-    photo = np.asarray(photo)[..., :3]
-    if guide["method"] == "lineart":
-        global _detector
-        if _detector is None:
-            from controlnet_aux import LineartDetector
-            _detector = LineartDetector.from_pretrained("lllyasviel/Annotators")
-        smooth = photo.copy()
-        for _ in range(guide["smooth"]):
-            smooth = cv2.bilateralFilter(smooth, 9, 50, 7)
-        lines = _detector(Image.fromarray(smooth), detect_resolution=guide["resolution"],
-                          image_resolution=max(photo.shape[:2]))
-        lines = cv2.resize(np.asarray(lines.convert("L")), (photo.shape[1], photo.shape[0]), interpolation=cv2.INTER_LINEAR)
-        lines = (lines > guide["threshold"]).astype(np.uint8) * 255
-    elif guide["method"] == "canny":
-        gray = cv2.cvtColor(photo, cv2.COLOR_RGB2GRAY)
-        if guide["blur"] > 0:
-            gray = cv2.GaussianBlur(gray, (0, 0), guide["blur"])
-        lines = cv2.Canny(gray, guide["low"], guide["high"])
-    else:
-        raise ValueError(f"unknown guide method {guide['method']!r}: use 'lineart' or 'canny'")
-    return drop_specks(lines, guide["min_area"])
-
-
-def drop_specks(lines, min_area):
-    """Remove connected bits of line smaller than min_area pixels."""
-    if min_area <= 0:
-        return lines
-    count, labels, stats, _ = cv2.connectedComponentsWithStats((lines > 0).astype(np.uint8), connectivity=8)
-    keep = np.zeros(count, bool)
-    keep[1:] = stats[1:, cv2.CC_STAT_AREA] >= min_area
-    return np.where(keep[labels], 255, 0).astype(np.uint8)
-
-
-def load_guide(path, photo_shape):
-    """A saved or hand-edited guide, as white lines on black at the photo's size. Black lines on white
-    (as you'd draw on paper) are flipped automatically."""
-    g = np.asarray(Image.open(path).convert("L"))
-    if g.shape != tuple(photo_shape[:2]):
-        g = cv2.resize(g, (photo_shape[1], photo_shape[0]), interpolation=cv2.INTER_AREA)
-    if g.mean() > 127:
-        g = 255 - g
-    return np.where(g > 127, 255, 0).astype(np.uint8)
-
-
-# thickness: the line width the ControlNet sees, on a 1024-pixel face.
-LINE_WIDTH = 6
-
-
-def thin(lines):
-    """Lines thinned to one pixel wide (Zhang and Suen's thinning), keeping their shape and joins."""
-    img = (np.asarray(lines) > 0).astype(np.uint8)
-    img = np.pad(img, 1)
-    while True:
-        changed = False
-        for step in (0, 1):
-            p = [np.roll(np.roll(img, -dy, 0), -dx, 1) for dy, dx in
-                 ((-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1))]   # P2 .. P9
-            count = sum(p)
-            seq = p + [p[0]]
-            turns = sum((seq[i] == 0) & (seq[i + 1] == 1) for i in range(8))
-            if step == 0:
-                c1, c2 = p[0] * p[2] * p[4], p[2] * p[4] * p[6]
-            else:
-                c1, c2 = p[0] * p[2] * p[6], p[0] * p[4] * p[6]
-            drop = (img == 1) & (count >= 2) & (count <= 6) & (turns == 1) & (c1 == 0) & (c2 == 0)
-            if drop.any():
-                img[drop] = 0
-                changed = True
-        if not changed:
-            break
-    return (img[1:-1, 1:-1] * 255).astype(np.uint8)
-
-
-def face_edges(guide, n, fit=DEFAULT_FIT, size=1024, width=None):
-    """White lines on black: the ControlNet's guide for face n, cut from the whole guide and unsheared
-    into the face's upright square. Lines are redrawn at the same width on every face, whatever the
-    photo's resolution: width pixels on a 1024-pixel face (LINE_WIDTH by default)."""
-    width = LINE_WIDTH if width is None else width
-    # Cut out with a margin and thin before cropping, so lines run straight off the face's edges
-    # instead of bending toward its corners.
-    pad = size // 8
-    e = face_photo(cv2.GaussianBlur(guide.astype(np.float32), (0, 0), 0.7), n, fit, size, pad)
-    if size >= 400:
-        e = cv2.GaussianBlur(e, (0, 0), size / 400)       # smooth the enlarged pixel steps
-    e = thin(e > 40)[pad:pad + size, pad:pad + size]
-    w = max(1, int(round(width * size / 1024)))
-    return cv2.dilate(e, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (w, w))) if w > 1 else e
-
-
 def head_on_photo(photo, fit=DEFAULT_FIT, size=768, margin=0.06):
-    """What the model shows head-on if each face is printed with its piece of the photo."""
+    """What the model shows head-on if each face is printed with its piece of a picture."""
     return render([to_texture(n, face_photo(photo, n, fit, 256), 256) for n in _in_faces_order()],
                   size=size, margin=margin)
 
@@ -306,6 +200,215 @@ def head_on_photo(photo, fit=DEFAULT_FIT, size=768, margin=0.06):
 def _in_faces_order():
     by_index = {i: n for n, i in FACE_INDEX.items()}
     return [by_index[i] for i in range(len(faces()))]
+
+
+# ---------------------------------------------------------------------------------------------------
+# The study: a flat geometric painting of the face (an SVG of filled polygons), which sets the whole
+# composition. It gives every face two things, drawn straight from the polygons at full resolution:
+#
+#   edges   every polygon's outline and every line in the SVG, all one color and one width. The painter
+#           follows them, and they're drawn again on top of the finished face, so the face stays legible
+#           whatever gets painted inside.
+#   shades  each polygon (a "chunk") has a target lightness, from its fill. The painter starts from them,
+#           and finishing moves each chunk's average lightness toward its target while keeping the
+#           painting's own colors and texture. A chunk can be any color, as long as it's that light.
+#
+# Fills are measured as CIELAB lightness L* (0 black to 100 white), and the study's darkest and lightest
+# fills are stretched to SHADES, so the darkest chunks are dark but still colored, and black edges stand
+# out against them.
+SHADES = (15.0, 92.0)
+STUDY_CROP = dict(left=1 / 8, right=1 / 8, top=0.0, bottom=1 / 8)
+
+
+class Study:
+    """The polygons of a flat SVG painting, cropped. Coordinates are SVG units with the crop's top-left
+    at (0, 0). chunks: (points, (r, g, b)) in painting order. lines: (points, closed)."""
+
+    def __init__(self, width, height, chunks, lines, source=""):
+        self.width, self.height = width, height
+        self.chunks, self.lines = chunks, lines
+        self.source = source
+
+    @property
+    def shape(self):
+        return (self.height, self.width)
+
+    def lightness(self, shades=SHADES):
+        """Target L* of each chunk, the study's range stretched to shades."""
+        L = np.array([_lightness(c) for _, c in self.chunks])
+        lo, hi = L.min(), L.max()
+        return shades[0] + (L - lo) / max(hi - lo, 1e-6) * (shades[1] - shades[0])
+
+    def edges(self):
+        """Every outline and line, as (points, closed)."""
+        return [(p, True) for p, _ in self.chunks] + self.lines
+
+    def id(self):
+        import hashlib
+        return hashlib.md5(self.source.encode()).hexdigest()[:8]
+
+
+def _lightness(rgb):
+    px = np.array([[rgb]], np.float32) / 255
+    return float(cv2.cvtColor(px, cv2.COLOR_RGB2LAB)[0, 0, 0])
+
+
+def _points(s):
+    v = [float(x) for x in s.replace(",", " ").split()]
+    return np.array(v).reshape(-1, 2)
+
+
+def load_study(path, crop=STUDY_CROP):
+    """Read the study's SVG: its filled polygons and rectangles become chunks, its lines and polylines
+    become extra edges. Hatching patterns, filters and translucent overlays are ignored. crop: fractions
+    of the SVG's width or height to cut from each side."""
+    import re
+    text = Path(path).read_text()
+    shapes = re.sub(r"<defs\b.*?</defs>", "", text, flags=re.S)          # pattern tiles aren't shapes
+    vb = re.search(r'viewBox="([^"]+)"', text)
+    vx, vy, vw, vh = (float(x) for x in vb.group(1).split()) if vb else (0, 0, float(re.search(
+        r'width="([\d.]+)', text).group(1)), float(re.search(r'height="([\d.]+)', text).group(1)))
+    x0, y0 = vx + crop["left"] * vw, vy + crop["top"] * vh
+    W, H = vw * (1 - crop["left"] - crop["right"]), vh * (1 - crop["top"] - crop["bottom"])
+    shift = np.array([x0, y0])
+
+    def attr(tag, name):
+        m = re.search(rf'\b{name}="([^"]*)"', tag)
+        return m.group(1) if m else None
+
+    chunks, lines = [], []
+    for tag in re.findall(r"<(?:rect|polygon|polyline|line)\b[^>]*>", shapes):
+        kind = re.match(r"<(\w+)", tag).group(1)
+        fill = attr(tag, "fill") or ""
+        if kind in ("rect", "polygon"):
+            if not re.fullmatch(r"#[0-9A-Fa-f]{6}", fill) or attr(tag, "fill-opacity") or attr(tag, "filter"):
+                continue
+            if kind == "rect":
+                x, y, w, h = (float(attr(tag, k) or 0) for k in ("x", "y", "width", "height"))
+                pts = np.array([(x, y), (x + w, y), (x + w, y + h), (x, y + h)])
+            else:
+                pts = _points(attr(tag, "points"))
+            chunks.append((pts - shift, tuple(int(fill[i:i + 2], 16) for i in (1, 3, 5))))
+        elif kind == "polyline":
+            lines.append((_points(attr(tag, "points")) - shift, False))
+        else:
+            pts = np.array([[float(attr(tag, k)) for k in ("x1", "y1")], [float(attr(tag, k)) for k in ("x2", "y2")]])
+            lines.append((pts - shift, False))
+    if not chunks:
+        raise ValueError(f"{path}: no filled polygons found")
+    return Study(W, H, chunks, lines, source=text + repr(sorted(crop.items())))
+
+
+def _face_points(study, n, fit, size):
+    """A function taking study points to face n's picture pixels (continuous, pixel centers at +0.5)."""
+    p0, A = _face_affine(study.shape, n, fit, size)
+    Ainv = np.linalg.inv(A)
+    return lambda P: (np.asarray(P, float) - p0) @ Ainv.T
+
+
+_SUB = 4   # subpixel bits for drawing
+
+
+def _fx(P):
+    return np.round(P * (1 << _SUB)).astype(np.int32)
+
+
+def face_chunks(study, n, fit=DEFAULT_FIT, size=1024):
+    """Which chunk covers each pixel of face n's picture (int32; -1 outside the study)."""
+    to_face = _face_points(study, n, fit, size)
+    ids = np.full((size, size), -1, np.int32)
+    for k, (pts, _) in enumerate(study.chunks):
+        cv2.fillPoly(ids, [_fx(to_face(pts))], k, lineType=cv2.LINE_8, shift=_SUB)
+    return ids
+
+
+def _edge_px(width, size):
+    return max(1, int(round(width * size / 1024)))
+
+
+def face_lines(study, n, fit=DEFAULT_FIT, size=1024, width=24):
+    """Face n's edges, white on black (uint8, antialiased): width pixels on a 1024-pixel face."""
+    to_face = _face_points(study, n, fit, size)
+    out = np.zeros((size, size), np.uint8)
+    w = _edge_px(width, size)
+    for pts, closed in study.edges():
+        cv2.polylines(out, [_fx(to_face(pts))], closed, 255, w, cv2.LINE_AA, shift=_SUB)
+    return out
+
+
+def _gray(L):
+    """L* -> sRGB gray in [0, 1]."""
+    L = np.asarray(L, np.float32)
+    lab = np.zeros(np.atleast_2d(L).shape + (3,), np.float32)
+    lab[..., 0] = np.atleast_2d(L)
+    return np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB), 0, 1).reshape(L.shape + (3,))
+
+
+def face_shades(study, n, fit=DEFAULT_FIT, size=1024, shades=SHADES):
+    """Face n's target lightness as a gray picture in [0, 1] (black outside the study)."""
+    ids = face_chunks(study, n, fit, size)
+    L = np.where(ids >= 0, study.lightness(shades)[ids], 0.0)
+    return _gray(L)
+
+
+# How finished faces look: how far each chunk's lightness moves to its target (0 none, 1 all the way),
+# the edges' width on a 1024-pixel face and their color, and the lightness range.
+DEFAULT_FINISH = dict(shade=0.8, edge_width=24, edge_color=(0, 0, 0), shades=SHADES)
+
+
+def finish(picture, study, n, fit=DEFAULT_FIT, settings=DEFAULT_FINISH):
+    """A painting of face n, finished: each chunk's lightness moved toward its target, its texture and
+    colors kept, and the study's edges drawn on top. Returns an RGB uint8 array."""
+    pic = np.asarray(Image.fromarray(np.asarray(picture)).convert("RGB") if not isinstance(picture, Image.Image)
+                     else picture.convert("RGB"), np.float32) / 255
+    S = pic.shape[0]
+    ids = face_chunks(study, n, fit, S)
+    lines = face_lines(study, n, fit, S, settings["edge_width"]).astype(np.float32) / 255
+    target = study.lightness(settings["shades"])
+    lab = cv2.cvtColor(pic, cv2.COLOR_RGB2LAB)
+    L = lab[..., 0]
+    out = L.copy()
+    visible = lines < 0.5
+    for k in np.unique(ids):
+        if k < 0:
+            continue
+        m = ids == k
+        seen = m & visible if (m & visible).any() else m
+        mean = L[seen].mean()
+        goal = mean + settings["shade"] * (target[k] - mean)
+        dev = L[m] - mean
+        # Keep the texture, squeezed only as much as it takes to fit between black and white.
+        spread = np.percentile(np.abs(dev), 95)
+        room = min(goal, 100 - goal)
+        out[m] = goal + dev * (min(1.0, room / spread) if spread > 1e-6 else 1.0)
+    lab[..., 0] = out
+    rgb = np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB), 0, 1)
+    color = np.array(settings["edge_color"], np.float32) / 255
+    rgb = rgb * (1 - lines[..., None]) + color * lines[..., None]
+    return (rgb * 255).round().astype(np.uint8)
+
+
+def study_face(study, n, fit=DEFAULT_FIT, size=1024, settings=DEFAULT_FINISH):
+    """Face n as the study itself: its target shades in gray, with edges. What an unpainted face shows."""
+    gray = (face_shades(study, n, fit, size, settings["shades"]) * 255).astype(np.uint8)
+    return finish(gray, study, n, fit, dict(settings, shade=1.0))
+
+
+def draw_study(study, scale=2.0, settings=DEFAULT_FINISH, fit=DEFAULT_FIT, original=False):
+    """The whole study as a picture (scale pixels per SVG unit): target shades in gray with edges, or with
+    original=True its own fill colors. Edges are as wide as they'll be on the faces."""
+    W, H = int(round(study.width * scale)), int(round(study.height * scale))
+    target = study.lightness(settings["shades"])
+    img = np.zeros((H, W, 3), np.uint8)
+    for k, (pts, color) in enumerate(study.chunks):
+        c = color if original else tuple(int(v) for v in (_gray(target[k]) * 255).round())
+        cv2.fillPoly(img, [_fx(pts * scale)], c, cv2.LINE_AA, shift=_SUB)
+    _, A = _face_affine((H, W), 13, fit, 1024)                # pixels per face pixel, for the edge width
+    w = max(1, int(round(settings["edge_width"] * np.linalg.norm(A[:, 0]))))
+    for pts, closed in study.edges():
+        cv2.polylines(img, [_fx(pts * scale)], closed, tuple(int(v) for v in settings["edge_color"]), w,
+                      cv2.LINE_AA, shift=_SUB)
+    return img
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -327,7 +430,7 @@ def face_polygons(size=768, margin=0.06, t=0.0, axis=2):
 
 
 def outlined_photo(photo, fit=DEFAULT_FIT, color=(255, 60, 60)):
-    """The photo (or guide) with every face's outline and number drawn where it falls, head-on."""
+    """A picture (the study, or a photo) with every face's outline and number drawn where it falls, head-on."""
     photo = np.asarray(photo)
     img = Image.fromarray(np.repeat(photo[..., None], 3, 2) if photo.ndim == 2 else photo[..., :3].copy())
     draw = ImageDraw.Draw(img)
@@ -370,11 +473,12 @@ def numbered(image, size=768, margin=0.06, color=(255, 60, 60), labels=None):
 # ---------------------------------------------------------------------------------------------------
 # The store, a folder (on Google Drive in Colab, so it survives disconnects):
 #
-#   WORK/guide.png                         the line drawing every face is cut from; edit it freely
 #   WORK/candidates/face_07/003.png .json  every painting of face 7, numbered, never overwritten,
 #                                          with the prompt, seed and settings that made it
 #   WORK/kept/face_07.png .json            the candidate you kept for face 7
+#   WORK/finished/face_07.png              face 7 finished: shades matched, edges drawn
 #
+# Candidates are saved raw, before finishing, so finishing settings can change without repainting.
 # Painting only ever adds candidates, and keeping only copies one into kept/. So nothing you keep is
 # repainted, and nothing you painted is lost.
 class Store:
@@ -382,10 +486,6 @@ class Store:
         self.root = Path(root)
         for d in ("candidates", "kept"):
             (self.root / d).mkdir(parents=True, exist_ok=True)
-
-    @property
-    def guide_path(self):
-        return self.root / "guide.png"
 
     def _cdir(self, n):
         return self.root / "candidates" / f"face_{n:02d}"
@@ -451,23 +551,32 @@ def todo(store, faces_wanted="unkept"):
     return list(faces_wanted)
 
 
-def board(store, guide, fit=DEFAULT_FIT, res=256):
-    """One texture per face, in faces() order, for render(): the kept painting, or for a face not yet
-    kept, its guide lines in gray, so you can see what's left."""
+def board(store, study, fit=DEFAULT_FIT, res=256, settings=DEFAULT_FINISH):
+    """One texture per face, in faces() order, for render(): the kept painting, finished, or for a face
+    not yet kept, the study itself (gray shades and edges), so you can see what's left."""
     kept = store.kept()
     out = []
     for n in _in_faces_order():
         if n in kept:
-            out.append(to_texture(n, kept[n][0].resize((res, res), Image.LANCZOS), res))
+            pic = finish(kept[n][0].resize((res * 2, res * 2), Image.LANCZOS), study, n, fit, settings)
         else:
-            e = face_edges(guide, n, fit, res * 2)
-            g = 0.3 + 0.45 * (cv2.resize(e, (res, res), interpolation=cv2.INTER_AREA) / 255.0)
-            out.append(to_texture(n, g, res))
+            pic = study_face(study, n, fit, res * 2, settings)
+        out.append(to_texture(n, cv2.resize(pic, (res, res), interpolation=cv2.INTER_AREA), res))
     return out
 
 
-def contact_sheet(store, n, columns=4, thumb=256):
-    """Every candidate of face n in a grid, labeled with its number and seed, the kept one outlined."""
+def save_finished(store, study, folder, fit=DEFAULT_FIT, settings=DEFAULT_FINISH):
+    """Every kept face, finished at full size, saved as folder/face_NN.png. Returns the face numbers."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    for n, (pic, _) in store.kept().items():
+        Image.fromarray(finish(pic, study, n, fit, settings)).save(folder / f"face_{n:02d}.png")
+    return sorted(store.kept())
+
+
+def contact_sheet(store, n, columns=4, thumb=256, finished=None):
+    """Every candidate of face n in a grid, labeled with its number and seed, the kept one outlined.
+    finished: optional function picture -> finished picture, to show candidates as they'd end up."""
     nums = store.candidates(n)
     if not nums:
         return None
@@ -478,6 +587,8 @@ def contact_sheet(store, n, columns=4, thumb=256):
     font = _font(15)
     for k, c in enumerate(nums):
         pic, info = store.candidate(n, c)
+        if finished is not None:
+            pic = Image.fromarray(finished(pic))
         x, y = (k % columns) * thumb, (k // columns) * (thumb + 22)
         sheet.paste(pic.resize((thumb, thumb), Image.LANCZOS), (x, y + 22))
         mark = "  KEPT" if c == kept else ""
@@ -488,21 +599,23 @@ def contact_sheet(store, n, columns=4, thumb=256):
 
 
 # ---------------------------------------------------------------------------------------------------
-# Painting (GPU). Stable Diffusion XL with a canny ControlNet; the canny ControlNet follows any white
-# lines on black, so it takes the guide as is.
-DEFAULT_PAINT = dict(control_scale=0.6, guidance=7.0, steps=30, size=1024)
+# Painting (GPU). Stable Diffusion XL with a canny ControlNet, starting from the face's target shades
+# (img2img) and following its edges. The ControlNet sees the edges thin (control_width on a 1024-pixel
+# face), as canny would draw them; the thick edges are drawn on afterwards by finish().
+#   strength: how far the painter may move from the shades it starts from (1 ignores them).
+DEFAULT_PAINT = dict(control_scale=0.6, guidance=7.0, steps=30, size=1024, strength=0.8, control_width=4)
 
 
 def load_painter():
     import gc
 
     import torch
-    from diffusers import AutoencoderKL, ControlNetModel, StableDiffusionXLControlNetPipeline
+    from diffusers import AutoencoderKL, ControlNetModel, StableDiffusionXLControlNetImg2ImgPipeline
     # Each piece goes to the GPU as soon as it loads, so Colab's RAM never holds them all at once.
     controlnet = ControlNetModel.from_pretrained("diffusers/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16).to("cuda")
     vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16).to("cuda")
     gc.collect()
-    painter = StableDiffusionXLControlNetPipeline.from_pretrained(
+    painter = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
         "stabilityai/stable-diffusion-xl-base-1.0", controlnet=controlnet, vae=vae,
         torch_dtype=torch.float16, variant="fp16").to("cuda")
     painter.vae.enable_tiling()
@@ -510,27 +623,22 @@ def load_painter():
     return painter
 
 
-def guide_id(guide):
-    """A short fingerprint of a guide, saved with each candidate, to tell which guide made it."""
-    import hashlib
-    return hashlib.md5(np.ascontiguousarray(guide).tobytes()).hexdigest()[:8]
-
-
-def paint(painter, store, guide, n, prompt, seeds, style="", negative="", fit=DEFAULT_FIT,
-          settings=DEFAULT_PAINT):
-    """Paint face n once per seed, and save each as a new candidate. Returns the candidate numbers."""
+def paint(painter, store, study, n, prompt, seeds, style="", negative="", fit=DEFAULT_FIT,
+          settings=DEFAULT_PAINT, shades=SHADES):
+    """Paint face n once per seed, and save each raw painting as a new candidate (finishing happens when
+    it's shown, so it can change later). Returns the candidate numbers."""
     import torch
     _check(n)
     size = settings["size"]
-    lines = face_edges(guide, n, fit, size)
-    control = Image.fromarray(lines).convert("RGB")
+    control = Image.fromarray(face_lines(study, n, fit, size, settings["control_width"])).convert("RGB")
+    start = Image.fromarray((face_shades(study, n, fit, size, shades) * 255).astype(np.uint8))
     full = ", ".join(p for p in (prompt, style) if p)
     made = []
     for seed in seeds:
-        pic = painter(full, negative_prompt=negative or None, image=control,
-                      controlnet_conditioning_scale=settings["control_scale"], guidance_scale=settings["guidance"],
-                      num_inference_steps=settings["steps"], width=size, height=size,
-                      generator=torch.Generator("cuda").manual_seed(int(seed))).images[0]
+        pic = painter(full, negative_prompt=negative or None, image=start, control_image=control,
+                      strength=settings["strength"], controlnet_conditioning_scale=settings["control_scale"],
+                      guidance_scale=settings["guidance"], num_inference_steps=settings["steps"],
+                      width=size, height=size, generator=torch.Generator("cuda").manual_seed(int(seed))).images[0]
         made.append(store.add_candidate(n, pic, dict(prompt=prompt, style=style, negative=negative, seed=int(seed),
-                                                     settings=dict(settings), fit=dict(fit), guide=guide_id(guide))))
+                                                     settings=dict(settings), fit=dict(fit), study=study.id())))
     return made
