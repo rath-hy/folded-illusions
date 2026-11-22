@@ -64,3 +64,13 @@ We picked seed 1. **[`obama_paint.ipynb`](obama_paint.ipynb)** paints it: SDXL w
 The joiner code isn't committed yet.
 
 **The scan** is "BARACK OBAMA" by louis on Sketchfab (https://sketchfab.com/3d-models/barack-obama-3010d6b0fdd843b397fa9e98437bc22a), licensed CC BY 4.0, so we can use it with credit. We'd guessed it was the Smithsonian's 2014 scan; it isn't. The author rebuilt it by photogrammetry from 125 frames of a video. The painting guides rendered from it are in [`obama_kit/`](obama_kit), with the credit. The scan itself stays out of the repo (its OBJ is 32 MB, over our limit).
+
+## Painting the Obama joiner (Nov 22)
+
+- **Paintings.** The first run of [`obama_paint.ipynb`](obama_paint.ipynb) gave seven consistent paintings, but realist and smooth rather than charcoal. Rather than repaint, we keep them and geometrize afterwards.
+- **Facets.** The head's surface is cut into about 600 straight-edged triangles (denser around the eyes, nose and mouth), each taking the paintings' average color, mixed in at 0.85. Facet outlines are left off. Cutting in 3D keeps every tile and tilt in agreement; cutting each painting in 2D wouldn't.
+- **Oil, first try.** A filter-based oil look (wobble, Kuwahara, dragged strokes, canvas) looked computer-made. Dropped.
+- **Pointillist oil.** Each of the 25 face textures gets a dot underpainting first, made without a GPU, with dot size set by detail. SDXL then turns the dots into oil daubs. The first run looked good, but kept hard facet outlines and flat fills that a painter working only in dots couldn't make. The edge guide is now weaker and stops after 40% of the steps, and the negative prompt rules out outlines and fills; not yet rerun.
+- **Backdrop.** Only about 10% of the backdrop ever shows: a band around the face. Text-to-image twice failed to give the right species, so [`obama_backdrop.ipynb`](obama_backdrop.ipynb) now builds a leaf wall (SDXL and FLUX.1-schnell compared) and pastes real flower photos with open licenses exactly into that band (credits in [`obama_kit/flowers/`](obama_kit/flowers)), then blends with one light pass. Kehinde Wiley's portrait gives the direction (species, colors, density) but is never fed to a model or stored here.
+
+**How we know:** software only. The facets, the dots and the flower collage ran locally and were judged by eye. The oil-step fix and the backdrop notebook haven't run on a GPU yet; their code parses.

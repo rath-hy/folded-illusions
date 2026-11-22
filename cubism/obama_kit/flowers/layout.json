@@ -1,0 +1,59 @@
+[
+ {
+  "flower": "chrysanthemum_2.png",
+  "x": 190,
+  "y": 335,
+  "size": 230,
+  "turn": 10
+ },
+ {
+  "flower": "chrysanthemum_3.png",
+  "x": 158,
+  "y": 512,
+  "size": 215,
+  "turn": -25
+ },
+ {
+  "flower": "chrysanthemum_1.png",
+  "x": 200,
+  "y": 682,
+  "size": 235,
+  "turn": 40
+ },
+ {
+  "flower": "jasmine_1.png",
+  "x": 835,
+  "y": 335,
+  "size": 215,
+  "turn": 0
+ },
+ {
+  "flower": "jasmine_2.png",
+  "x": 868,
+  "y": 512,
+  "size": 215,
+  "turn": 60
+ },
+ {
+  "flower": "jasmine_3.png",
+  "x": 825,
+  "y": 682,
+  "size": 205,
+  "turn": -30
+ },
+ {
+  "flower": "agapanthus_1.png",
+  "x": 512,
+  "y": 90,
+  "size": 270,
+  "turn": 180,
+  "mirror": true
+ },
+ {
+  "flower": "agapanthus_1.png",
+  "x": 512,
+  "y": 955,
+  "size": 270,
+  "turn": 0
+ }
+]
