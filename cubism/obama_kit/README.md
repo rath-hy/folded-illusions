@@ -9,3 +9,7 @@ Rendered from "BARACK OBAMA" by louis (https://sketchfab.com/louis), published o
 Changes: we cut away the base and back of the head, reoriented and rescaled it, and rendered these views with our own orthographic renderer.
 
 Per the author, the model is a photogrammetry reconstruction from 125 frames of a video, not the Smithsonian's official 3D portrait.
+
+## Flowers
+
+`flowers.json` places one flower per region of the backdrop band that shows: chrysanthemums down the left, jasmine down the right, African blue lilies at the top and bottom. Each `flowers_*.png` is that flower's mask (white is repainted). `backdrop_leaves.png` is the backdrop they're painted onto, our own SDXL painting.
