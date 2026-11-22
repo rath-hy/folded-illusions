@@ -45,3 +45,20 @@ The photo isn't committed; we need its source and license recorded before we pub
 - **The working folder moved** to `MyDrive/folded-illusions/bayon-study`, so the photo-guide candidates don't mix in.
 
 **How we know:** software only. Tests cover reading and cropping the SVG, which faces an edge lands on, the shades, finishing (80% of the way, texture kept, solid black edges about 24 px wide) and the board. The whole notebook ran on CPU with a stand-in painter (smooth random color), including the paint, keep, repaint and board loop. Head-on, the face reads clearly even with random color in every face. SDXL hasn't run on it yet.
+
+## Obama, as a Hockney-style joiner (Nov 21–22)
+
+**We dropped the Bayon face** and removed its files (`bayon.py`, `bayon.ipynb`, `bayon-study.svg` and its tests). The sections above describe that work as it was; it lives on in the history.
+
+**The subject is now Barack Obama, from a 3D scan.** After several tries (per-face fragments, matching a blurred head-on portrait), the version that works takes after David Hockney's photo joiners. Each of the 25 faces is its own photograph of the scan, with its own angle, zoom and rotation:
+
+- **Loose geography:** each face shows roughly the part of the head that belongs where it sits head-on, so the brow and eyes are up top, the nose is in the middle, and mouths and chin are below.
+- **Variety:** faces along one axis share a family of nearby angles (front, side, from below), so tilting shows a joiner from roughly one direction, but no two repeat an angle, and zooms run from an eye filling the face to a small whole head.
+- **An oval outline head-on:** each face searches its rotation (any), a small slide and a zoom nudge so that head shows inside an oval and not outside it.
+- **A gentle geography term:** features a face shows earn a little for landing near where they belong head-on and cost a little for landing far off.
+
+We picked seed 1. **[`obama_paint.ipynb`](obama_paint.ipynb)** paints it: SDXL with a depth ControlNet paints the scan from seven angles in charcoal with bright presidential colors, after Kehinde Wiley's official portrait, plus a green floral backdrop (jasmine, chrysanthemums, blue lilies). The paintings are wrapped back onto the 3D head, and the joiner photographs the painted head; the backdrop fills wherever a face shows no head, continuous head-on.
+
+**How we know:** software only. The joiner, the oval search and the wrap-back run locally; the wrap-back reproduced the scan's own look when fed the scan's renders as stand-in paintings. The notebook's code parses but hasn't run on a GPU yet.
+
+The joiner code isn't committed yet, and neither is the scan or anything rendered from it: the scan looks like a download of the Smithsonian's 2014 scan, but we haven't recorded its source or license.
