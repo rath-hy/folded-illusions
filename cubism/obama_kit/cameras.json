@@ -1,0 +1,39 @@
+{
+ "center": [
+  0.0,
+  0.0,
+  0.75
+ ],
+ "span": 3.7,
+ "size": 1024,
+ "views": {
+  "front": {
+   "yaw": 0,
+   "pitch": 0
+  },
+  "three_quarter": {
+   "yaw": -40,
+   "pitch": 0
+  },
+  "profile": {
+   "yaw": -82,
+   "pitch": 0
+  },
+  "three_quarter_left": {
+   "yaw": 30,
+   "pitch": 0
+  },
+  "below": {
+   "yaw": 0,
+   "pitch": -40
+  },
+  "below_side": {
+   "yaw": -40,
+   "pitch": -32
+  },
+  "above": {
+   "yaw": 0,
+   "pitch": 32
+  }
+ }
+}

@@ -61,4 +61,6 @@ We picked seed 1. **[`obama_paint.ipynb`](obama_paint.ipynb)** paints it: SDXL w
 
 **How we know:** software only. The joiner, the oval search and the wrap-back run locally; the wrap-back reproduced the scan's own look when fed the scan's renders as stand-in paintings. The notebook's code parses but hasn't run on a GPU yet.
 
-The joiner code isn't committed yet, and neither is the scan or anything rendered from it: the scan looks like a download of the Smithsonian's 2014 scan, but we haven't recorded its source or license.
+The joiner code isn't committed yet.
+
+**The scan** is "BARACK OBAMA" by louis on Sketchfab (https://sketchfab.com/3d-models/barack-obama-3010d6b0fdd843b397fa9e98437bc22a), licensed CC BY 4.0, so we can use it with credit. We'd guessed it was the Smithsonian's 2014 scan; it isn't. The author rebuilt it by photogrammetry from 125 frames of a video. The painting guides rendered from it are in [`obama_kit/`](obama_kit), with the credit. The scan itself stays out of the repo (its OBJ is 32 MB, over our limit).
