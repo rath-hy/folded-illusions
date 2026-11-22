@@ -10,3 +10,5 @@ The panels of the cube model for the Obama joiner (seed 1), numbered in the orde
 The head comes from "BARACK OBAMA" by louis on Sketchfab, CC BY 4.0; see [`../obama_kit/README.md`](../obama_kit/README.md). The paintings and backdrop are our own SDXL output.
 
 These were made with the backdrop from before the flower step. Once the flowers are painted, these get remade.
+
+**Nov 22, remade.** The faces now use the backdrop from [`../obama_backdrop.ipynb`](../obama_backdrop.ipynb): an SDXL leaf wall with the photographed chrysanthemums, jasmine and agapanthus placed on it and blended in. The backdrop is faceted lightly (2,500 small triangles mixed 0.75 over the painting, against the head's 0.85), so it echoes the head while the small jasmine flowers stay white. Their photo credits are in [`../obama_kit/flowers/README.md`](../obama_kit/flowers/README.md).
