@@ -74,3 +74,11 @@ The joiner code isn't committed yet.
 - **Backdrop.** Only about 10% of the backdrop ever shows: a band around the face. Text-to-image twice failed to give the right species, so [`obama_backdrop.ipynb`](obama_backdrop.ipynb) now builds a leaf wall (SDXL and FLUX.1-schnell compared) and pastes real flower photos with open licenses exactly into that band (credits in [`obama_kit/flowers/`](obama_kit/flowers)), then blends with one light pass. Kehinde Wiley's portrait gives the direction (species, colors, density) but is never fed to a model or stored here.
 
 **How we know:** software only. The facets, the dots and the flower collage ran locally and were judged by eye. The oil-step fix and the backdrop notebook haven't run on a GPU yet; their code parses.
+
+## Obama in the cubism notebook (Nov 24)
+
+[`cubism.ipynb`](cubism.ipynb) now shows the Obama joiner instead of the guitar: it fetches the 25 finished faces from [`obama_faces/`](obama_faces/) (oil, clean or dots) and renders head-on, each axis, the tilt grid and `cubism_obama.gif`. It needs no GPU. The guitar version, which the provenance explorer in [`explorer/`](explorer/) reads, is at commit `acd474b` on `main`.
+
+The oil faces are the third run of the pointillist oil section, at `OIL_STRENGTH` 0.42. The first run, at 0.5 with Seurat and Signac named in the prompt, invented long-haired women in profile and lost Obama; the second, at 0.32 with no artist names and figures in the negative prompt, kept Obama but muted the dots. 0.42 keeps him with a little more paint.
+
+[`fold_map/`](fold_map/) has a label sheet for finding the real visibility map: an 8 × 8 grid on A4 with every cell and triangle labeled, to fold once and photograph.
