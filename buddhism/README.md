@@ -4,21 +4,23 @@
 
 ## What sparked it
 
-The [same-pixels](../same-pixels/) method paints a new picture from a prompt using exactly the pixels of another image. Pointed at a thangka of the Buddha, it can paint the four sights that set Siddhartha on his path, **an old man, a sick man, a dead man and an ascetic**, each out of the Buddha's own pixels. Four paintings, one set of pixels, rearranged: impermanence in arithmetic.
+The [same-pixels](../same-pixels/) method paints a new picture from a prompt using exactly the pixels of another image. Pointed at a painting of Manjushri, the bodhisattva of wisdom, it can paint the four sights that set Siddhartha on his path, **an old man, a sick man, a dead man and an ascetic**, each out of the same pixels. Four paintings, one set of pixels, rearranged: impermanence in arithmetic.
 
 ## How it works
 
 [`four_sights.ipynb`](four_sights.ipynb) (Colab, GPU) is the same-pixels notebook adapted:
 
-- **Square** (512 × 512). The 2:3 thangka is squeezed to the square by default rather than cropped: the sights only use its colors, so the distortion doesn't matter, and squeezing keeps the trees, sky and offerings in the palette. `FIT = "crop"` uses the middle square instead.
-- **The source is the thangka**, downloaded from where it was found, so nothing is uploaded and the painting isn't stored here.
-- **One prompt per sight plus a shared thangka style**, and a negative prompt against photographs and 3D renders, so the four are representational, like the reference. The palette is forced to the thangka's anyway, which does much of the work.
-- Every result is snapped to the thangka's exact pixels and checked: every exact RGB color appears exactly as many times as in the source.
+- **Square**, 512 × 512.
+- **The source is [`manjushri.jpeg`](manjushri.jpeg)**, fetched from this repo.
+- **One prompt per sight plus a shared thangka style.** A shared negative prompt steers away from photographs and deity iconography, and each sight has its own negative for its particular failure. The palette is forced to Manjushri's anyway, which does much of the work of matching the style.
+- Every result is snapped to the source's exact pixels and checked: every exact RGB color appears exactly as many times as in the source.
 
 ## The source
 
-`starting_image.avif` is a thangka of Shakyamuni Buddha with an alms bowl, two monks at his sides. It was downloaded from `cdn.sanity.io/images/caw6lfob/production/2bea4574…-2202x3259.jpg` (a Sanity CMS image; the site and painter aren't recorded yet). Its license is unknown, so it stays out of the repo until we know who painted it and whether we can use it.
+Manjushri seated on a lotus, Rubin Museum of Himalayan Art, object F1997.40.6 (https://rubinmuseum.org/collection/f1997-40-6/). [`manjushri.jpeg`](manjushri.jpeg) is a square crop of the museum's web image, the box (130, 467)–(1708, 2045): from the halo and the flaming sword down to the lotus and leaves, leaving out the brocade border and most of the water. The Rubin's terms for reusing its images haven't been checked yet.
 
 ## Status
 
-- **Nov 26:** notebook written. The source download, the resize to 512 × 512, the projection and the exact snap were tested locally without a GPU (the snap gives an identical histogram). The diffusion itself hasn't run yet.
+- **Nov 26:** notebook written; the loading, the projection and the exact snap were tested locally without a GPU (the snap gives an identical histogram).
+- **Nov 26, first run:** it worked, but the sights weren't harrowing enough. The style prompt (lotuses, haloes, ornament) pulled every figure toward a serene deity: the old man looked untroubled, the sick man sat calmly, and the dead man was a standing angel in white. The ascetic stood holding a bowl.
+- **Nov 26, new prompts**, after a set of Thai temple murals of the four sights: the old man bent over a cane, the sick man curled up in pain on a mat, the dead man a skeleton on the bare ground, the ascetic sitting cross-legged in meditation under a tree. The style prompt no longer mentions lotuses, haloes or ornament; the shared negative rules out halo, throne, crown, deity and angel; each sight's own negative names its failure (upright and serene for the old man, calm and sitting up for the sick man, any living person or clothing for the dead man, standing or walking for the ascetic). Three seeds each. Not yet run.
